@@ -1,5 +1,5 @@
 import { CheckCircle2, XCircle } from "lucide-react";
-import type { Scenario } from "./types";
+import { outcomeText, type Scenario } from "./types";
 
 /** The seven validation scenarios with pass/fail and the reason. */
 export function ScenarioList({ scenarios }: { scenarios: Scenario[] }) {
@@ -17,13 +17,13 @@ export function ScenarioList({ scenarios }: { scenarios: Scenario[] }) {
             <tr key={s.id} className="border-t border-slate-100 align-top">
               <td className="py-1.5 pr-2 tabular-nums text-slate-500">{s.id}</td>
               <td className="py-1.5 pr-2 font-medium">{s.name}</td>
-              <td className="py-1.5 pr-2 text-xs text-slate-600">{s.criterion}</td>
+              <td className="py-1.5 pr-2 text-xs text-slate-600">{outcomeText(s.criterion)}</td>
               <td className="py-1.5 pr-2">
                 {s.passed
                   ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" aria-hidden />Pass</span>
                   : <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700"><XCircle className="h-4 w-4" aria-hidden />Fail</span>}
               </td>
-              <td className="py-1.5 text-xs text-slate-600">{s.details}</td>
+              <td className="py-1.5 text-xs text-slate-600">{outcomeText(s.details)}</td>
             </tr>
           ))}
         </tbody>

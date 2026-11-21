@@ -1,4 +1,4 @@
-import { type MetricSet, type PairReport, hasLabelledPairs, pct } from "./types";
+import { hasLabelledPairs, type MetricSet, type PairReport, pct } from "./types";
 
 function MetricCard({ title, m }: { title: string; m: MetricSet }) {
   return (
@@ -16,13 +16,15 @@ function MetricCard({ title, m }: { title: string; m: MetricSet }) {
 
 /** Pair precision/recall/F1 at campaign and network level, plus false merges and mentor agreement. */
 export function PairMetrics({ pairs, falseMerges }: { pairs: PairReport; falseMerges: number }) {
+  const measured = hasLabelledPairs(pairs);
+  const tone = !measured ? "text-slate-700" : falseMerges === 0 ? "text-emerald-700" : "text-red-700";
   return (
     <div className="flex flex-col gap-3">
-      <p className={`text-sm font-medium ${falseMerges === 0 ? "text-emerald-700" : "text-red-700"}`}>
-        False merges: <span className="tabular-nums">{falseMerges}</span>
+      <p className={`text-sm font-medium ${tone}`}>
+        False merges: <span className="tabular-nums">{measured ? falseMerges : "not measured"}</span>
         <span className="font-normal text-slate-500"> · separate campaigns wrongly joined into one</span>
       </p>
-      {hasLabelledPairs(pairs) ? (
+      {measured ? (
         <>
           <div className="grid gap-3 md:grid-cols-2">
             <MetricCard title="Campaign level" m={pairs.campaign} />
@@ -35,7 +37,7 @@ export function PairMetrics({ pairs, falseMerges }: { pairs: PairReport; falseMe
         </>
       ) : (
         <p className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-600">
-          No labelled pairs in this report, so precision, recall and F1 are not measured. Supply a local label CSV to compute them.
+          No labelled pairs in this report, so precision, recall, F1 and false merges are not measured. Supply a local label CSV to compute them.
         </p>
       )}
     </div>
