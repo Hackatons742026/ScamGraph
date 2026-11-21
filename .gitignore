@@ -221,3 +221,30 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ============================================================
+# ScamGraph DNA — project rules (NASK data must NEVER be committed)
+# ============================================================
+# Dataset, cache and database (SCAMGRAPH_DATA_DIR defaults to data/raw/)
+data/
+*.db
+*.db-journal
+
+# Raw artifact types from the dataset, wherever they end up
+*.har
+.har
+*.mhtml
+*.mp4
+*.mov
+
+# Synthetic test fixtures are allowed (never real dataset files)
+!backend/tests/fixtures/**
+!frontend/src/test/fixtures/**
+
+# Frontend
+node_modules/
+# Re-include shadcn/ui utils (the generic `lib/` rule above would hide it)
+!frontend/src/lib/
+
+# Local agent settings
+.claude/settings.local.json
