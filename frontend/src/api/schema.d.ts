@@ -225,7 +225,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/campaigns/split": {
+    "/api/edges/{edge_id}/decision": {
         parameters: {
             query?: never;
             header?: never;
@@ -234,8 +234,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Optional Mutation */
-        post: operations["optional_mutation_api_campaigns_split_post"];
+        /** Decide Edge */
+        post: operations["decide_edge_api_edges__edge_id__decision_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -251,15 +251,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Optional Mutation */
-        post: operations["optional_mutation_api_campaigns_merge_post"];
+        /** Merge Campaigns */
+        post: operations["merge_campaigns_api_campaigns_merge_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/edges/{edge_id}/decision": {
+    "/api/campaigns/split": {
         parameters: {
             query?: never;
             header?: never;
@@ -268,8 +268,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Optional Mutation */
-        post: operations["optional_mutation_api_edges__edge_id__decision_post"];
+        /** Split Campaign */
+        post: operations["split_campaign_api_campaigns_split_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -529,6 +529,28 @@ export interface components {
             /** Evidence */
             evidence: components["schemas"]["EvidenceItem"][];
         };
+        /** EdgeDecisionRequest */
+        EdgeDecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Note */
+            note?: string | null;
+        };
+        /** EdgeDecisionResponse */
+        EdgeDecisionResponse: {
+            /** Edge Id */
+            edge_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Recorded At */
+            recorded_at: string;
+        };
         /** ErrorResponse */
         ErrorResponse: {
             /** Error */
@@ -730,6 +752,13 @@ export interface components {
             /** Height */
             height: number;
         };
+        /** MergeRequest */
+        MergeRequest: {
+            /** Campaign Ids */
+            campaign_ids: string[];
+            /** Note */
+            note?: string | null;
+        };
         /** MetricSet */
         MetricSet: {
             /** Precision */
@@ -857,6 +886,15 @@ export interface components {
             passed: boolean;
             /** Details */
             details: string;
+        };
+        /** SplitRequest */
+        SplitRequest: {
+            /** Campaign Id */
+            campaign_id: string;
+            /** Incident Ids */
+            incident_ids: string[];
+            /** Note */
+            note?: string | null;
         };
         /**
          * Tier
@@ -1642,15 +1680,30 @@ export interface operations {
             };
         };
     };
-    optional_mutation_api_campaigns_split_post: {
+    decide_edge_api_edges__edge_id__decision_post: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                edge_id: string;
+            };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeDecisionRequest"];
+            };
+        };
         responses: {
+            /** @description Decision recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeDecisionResponse"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -1689,15 +1742,28 @@ export interface operations {
             };
         };
     };
-    optional_mutation_api_campaigns_merge_post: {
+    merge_campaigns_api_campaigns_merge_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeRequest"];
+            };
+        };
         responses: {
+            /** @description Merged campaign */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignDetail"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -1736,15 +1802,28 @@ export interface operations {
             };
         };
     };
-    optional_mutation_api_edges__edge_id__decision_post: {
+    split_campaign_api_campaigns_split_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitRequest"];
+            };
+        };
         responses: {
+            /** @description Split campaigns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignDetail"][];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {

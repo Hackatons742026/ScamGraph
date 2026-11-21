@@ -36,3 +36,7 @@ export type GraphResponse = S["GraphResponse"];
 export type RunSummary = S["RunSummary"];
 export type ClassifyResult = S["ClassifyResult"];
 export type EvalReport = S["EvalReport"];
+export type EdgeDecisionRequest = S["EdgeDecisionRequest"];
+export type EdgeDecisionResponse = S["EdgeDecisionResponse"];
+export type MergeRequest = S["MergeRequest"];
+export type SplitRequest = S["SplitRequest"];

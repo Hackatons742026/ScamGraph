@@ -964,40 +964,71 @@
         }
       }
     },
-    "/api/campaigns/split": {
+    "/api/edges/{edge_id}/decision": {
       "post": {
-        "summary": "Optional Mutation",
-        "operationId": "optional_mutation_api_campaigns_split_post",
+        "summary": "Decide Edge",
+        "operationId": "decide_edge_api_edges__edge_id__decision_post",
+        "parameters": [
+          {
+            "name": "edge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Edge Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EdgeDecisionRequest"
+              }
+            }
+          }
+        },
         "responses": {
+          "200": {
+            "description": "Decision recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeDecisionResponse"
+                }
+              }
+            }
+          },
           "404": {
-            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Not Found"
           },
           "413": {
-            "description": "Content Too Large",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Content Too Large"
           },
           "422": {
-            "description": "Unprocessable Content",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Unprocessable Content"
           },
           "501": {
             "description": "Successful Response",
@@ -1014,9 +1045,29 @@
     },
     "/api/campaigns/merge": {
       "post": {
-        "summary": "Optional Mutation",
-        "operationId": "optional_mutation_api_campaigns_merge_post",
+        "summary": "Merge Campaigns",
+        "operationId": "merge_campaigns_api_campaigns_merge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
+          "200": {
+            "description": "Merged campaign",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignDetail"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -1060,11 +1111,35 @@
         }
       }
     },
-    "/api/edges/{edge_id}/decision": {
+    "/api/campaigns/split": {
       "post": {
-        "summary": "Optional Mutation",
-        "operationId": "optional_mutation_api_edges__edge_id__decision_post",
+        "summary": "Split Campaign",
+        "operationId": "split_campaign_api_campaigns_split_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
+          "200": {
+            "description": "Split campaigns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CampaignDetail"
+                  },
+                  "type": "array",
+                  "title": "Response 200 Split Campaign Api Campaigns Split Post"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -1100,7 +1175,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse",
+                  "items": {
+                    "$ref": "#/components/schemas/CampaignDetail"
+                  },
+                  "type": "array",
+                  "title": "Response Split Campaign Api Campaigns Split Post"
                 }
               }
             }
@@ -2004,6 +2084,63 @@
         ],
         "title": "Edge"
       },
+      "EdgeDecisionRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "EdgeDecisionRequest"
+      },
+      "EdgeDecisionResponse": {
+        "properties": {
+          "edge_id": {
+            "type": "string",
+            "title": "Edge Id"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "recorded_at": {
+            "type": "string",
+            "title": "Recorded At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "edge_id",
+          "decision",
+          "recorded_at"
+        ],
+        "title": "EdgeDecisionResponse"
+      },
       "ErrorResponse": {
         "properties": {
           "error": {
@@ -2751,6 +2888,34 @@
         ],
         "title": "Media"
       },
+      "MergeRequest": {
+        "properties": {
+          "campaign_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Campaign Ids"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "campaign_ids"
+        ],
+        "title": "MergeRequest"
+      },
       "MetricSet": {
         "properties": {
           "precision": {
@@ -3118,6 +3283,39 @@
           "details"
         ],
         "title": "Scenario"
+      },
+      "SplitRequest": {
+        "properties": {
+          "campaign_id": {
+            "type": "string",
+            "title": "Campaign Id"
+          },
+          "incident_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Incident Ids"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "campaign_id",
+          "incident_ids"
+        ],
+        "title": "SplitRequest"
       },
       "Tier": {
         "type": "string",
