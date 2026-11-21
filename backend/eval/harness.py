@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from backend.engine.linking import LinkEdge
+from backend.engine.memory import classify, cluster_incidents
+
 PAIR_COLUMNS = ("left_id", "right_id", "campaign", "network")
 OUTCOMES = ("known_campaign", "new_candidate", "needs_review")
 
@@ -78,6 +81,54 @@ def pair_report(labels: Sequence[PairLabel], predictions: Mapping[tuple[str, str
         "network": metric((row.network for row in labels), (row[1] for row in predicted))}
 
 
-def build_report(*args, **kwargs) -> dict:
-    """Implemented below with the deterministic scenario runner."""
-    raise NotImplementedError
+def _edge(source: str, target: str, *, level: str = "campaign", tier: str = "A",
+          comparable: int = 2) -> LinkEdge:
+    return LinkEdge(source, target, level, tier, (), 1.0, comparable, False, ())
+
+
+def synthetic_variants() -> list[tuple[str, str, bool, list[LinkEdge], str | None]]:
+    """Seven synthetic cases; these are the only built-in tuning inputs."""
+    return [
+        ("Exact tier-A match", "known_campaign", True, [_edge("x", "a")], None),
+        ("Multi-signal match", "known_campaign", True, [_edge("x", "a", tier="B")], None),
+        ("Network-only link", "new_candidate", True, [_edge("x", "a", level="network")], None),
+        ("No shared evidence", "new_candidate", True, [], None),
+        ("Insufficient coverage", "needs_review", False, [], None),
+        ("Conflicting campaigns", "needs_review", True, [_edge("x", "a"), _edge("x", "c")], None),
+        ("Excluded incident", "new_candidate", True, [_edge("x", "a")], "a"),
+    ]
+
+
+def scenarios() -> list[dict]:
+    base = [_edge("a", "b"), _edge("c", "d")]
+    clusters = cluster_incidents(["a", "b", "c", "d"], base)
+    output = []
+    for number, (name, expected, coverage, edges, excluded) in enumerate(synthetic_variants(), 1):
+        actual = classify("x", edges, clusters, coverage_ok=coverage, exclude_incident=excluded).outcome
+        output.append({"id": number, "name": name, "criterion": expected,
+            "passed": actual == expected, "details": f"expected {expected}; got {actual}"})
+    return output
+
+
+def loo_report(rows: Sequence[tuple[str, str, str]]) -> dict:
+    expected, predicted = [row[1] for row in rows], [row[2] for row in rows]
+    values = [{"incident_id": identifier, "expected": want, "predicted": got, "correct": want == got}
+              for identifier, want, got in rows]
+    return {"accuracy": sum(row["correct"] for row in values) / len(values) if values else 0.0,
+        "rows": values, "confusion": confusion(expected, predicted)}
+
+
+def build_report(labels: Sequence[PairLabel] = (),
+                 predictions: Mapping[tuple[str, str], tuple[bool, bool]] | None = None,
+                 loo_rows: Sequence[tuple[str, str, str]] = (),
+                 ablations: Mapping[str, Mapping[tuple[str, str], tuple[bool, bool]]] | None = None) -> dict:
+    pairs = pair_report(labels, predictions or {})
+    loo = loo_report(loo_rows)
+    variants = []
+    for name, variant in sorted((ablations or {"all-signals": predictions or {}}).items()):
+        scored = pair_report(labels, variant)["campaign"]
+        variants.append({"config": name, "campaign_p": scored["precision"],
+            "campaign_r": scored["recall"], "false_merges": scored["fp"],
+            "loo_routing": loo["accuracy"]})
+    return {"generated_at": None, "scenarios": scenarios(), "pairs": pairs,
+        "false_merges": pairs["campaign"]["fp"], "loo": loo, "ablation": variants}

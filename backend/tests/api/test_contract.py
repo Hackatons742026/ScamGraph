@@ -33,6 +33,7 @@ def test_filters_route_ordering_and_report_shape():
     report = client.get("/api/eval/report").json()
     assert set(report) == {"generated_at", "scenarios", "pairs", "false_merges", "loo", "ablation"}
     assert set(report["pairs"]) == {"n_pairs", "mentor_verified", "agreement", "campaign", "network"}
+    assert len(report["scenarios"]) == 7 and all(row["passed"] for row in report["scenarios"])
 
 
 def test_mutations_media_and_contract_errors():

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from . import seed
 from .schemas import *  # noqa: F403
+from backend.eval import build_report
 
 ERRORS = {code: {"model": ErrorResponse} for code in (404, 413, 422, 501)}
 router = APIRouter(prefix="/api", responses=ERRORS)
@@ -86,11 +87,7 @@ async def classify(_request: Request) -> ClassifyResult:
 
 @router.get("/eval/report", response_model=EvalReport)
 def evaluation() -> EvalReport:
-    metrics = MetricSet(precision=0, recall=0, f1=0, tp=0, fp=0, fn=0)
-    return EvalReport(generated_at=None, scenarios=[], pairs=PairReport(n_pairs=0,
-        mentor_verified=0, agreement=None, campaign=metrics, network=metrics),
-        false_merges=0, loo=LooReport(accuracy=0, rows=[],
-        confusion=Confusion(labels=[], matrix=[])), ablation=[])
+    return EvalReport.model_validate(build_report())
 
 @router.post("/edges/{edge_id}/decision", status_code=status.HTTP_501_NOT_IMPLEMENTED)
 @router.post("/campaigns/merge", status_code=status.HTTP_501_NOT_IMPLEMENTED)
