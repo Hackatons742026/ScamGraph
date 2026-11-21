@@ -69,6 +69,11 @@ class Repository:
             rows = db.execute("SELECT * FROM artifacts WHERE incident_id=? ORDER BY id", (incident_id,))
             return [dict(row) for row in rows]
 
+    def get_artifact(self, artifact_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM artifacts WHERE id=?", (artifact_id,)).fetchone()
+        return dict(row) if row else None
+
     def save_evidence(self, incident_id: str, evidence: Iterable[Evidence]) -> None:
         rows = [(
             incident_id, item.artifact_id, item.type, _scalar(item.family), _scalar(item.tier),
@@ -98,6 +103,10 @@ class Repository:
         with self._connection() as db:
             row = db.execute("SELECT * FROM media WHERE id=?", (media_id,)).fetchone()
         return dict(row) if row else None
+
+    def list_media(self, artifact_id: str) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM media WHERE artifact_id=? ORDER BY id", (artifact_id,))]
 
     def save_run(self, run_id: str, status: str, started_at: str, *,
                  finished_at: str | None = None, summary: dict[str, Any] | None = None,
