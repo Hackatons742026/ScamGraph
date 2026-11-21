@@ -1,0 +1,66 @@
+// @vitest-environment node
+// Node env: jsdom's File/FormData can't be serialised by Node's native Request (multipart with files hangs).
+import { describe, expect, it } from "vitest";
+import { api, ApiRequestError, unwrap } from "@/api/client";
+
+describe("mock transport covers contract v1", () => {
+  it("serves health, runs and import", async () => {
+    expect((await unwrap(api.GET("/api/health"))).status).toBe("ok");
+    const run = await unwrap(api.GET("/api/runs/latest"));
+    expect(run.status).toBe("done");
+    expect((await unwrap(api.GET("/api/runs/{id}", { params: { path: { id: run.id } } }))).id).toBe(run.id);
+    const started = await api.POST("/api/import", { body: {} });
+    expect(started.response.status).toBe(202);
+    expect(started.data?.run_id).toBe(run.id);
+  });
+
+  it("filters incidents by status (review queue) and campaign", async () => {
+    const all = await unwrap(api.GET("/api/incidents"));
+    const queue = await unwrap(api.GET("/api/incidents", { params: { query: { status: "needs_review,unassigned" } } }));
+    expect(queue.length).toBeGreaterThan(0);
+    expect(queue.length).toBeLessThan(all.length);
+    expect(queue.every((i) => i.status === "needs_review" || i.status === "unassigned")).toBe(true);
+    const camp = await unwrap(api.GET("/api/incidents", { params: { query: { campaign: all[0]!.campaign_id! } } }));
+    expect(camp.every((i) => i.campaign_id === all[0]!.campaign_id || i.network_id === all[0]!.campaign_id)).toBe(true);
+  });
+
+  it("serves incident, artifact, campaign, links and graph details", async () => {
+    const [first] = await unwrap(api.GET("/api/incidents"));
+    const detail = await unwrap(api.GET("/api/incidents/{id}", { params: { path: { id: first!.id } } }));
+    expect(detail.evidence.every((e) => typeof e.display === "string" && e.tier)).toBe(true);
+    const artifact = await unwrap(api.GET("/api/artifacts/{id}", { params: { path: { id: detail.artifacts[0]!.id } } }));
+    expect(artifact.id).toBe(detail.artifacts[0]!.id);
+    const [camp] = await unwrap(api.GET("/api/campaigns"));
+    expect((await unwrap(api.GET("/api/campaigns/{id}", { params: { path: { id: camp!.id } } }))).members.length).toBe(camp!.size);
+    expect(Array.isArray(await unwrap(api.GET("/api/campaigns/{id}/links", { params: { path: { id: camp!.id } } })))).toBe(true);
+    const graph = await unwrap(api.GET("/api/graph", { params: { query: { tiers: "A" } } }));
+    expect(graph.edges.length).toBeGreaterThan(0);
+    expect(graph.edges.every((e) => e.tier === "A")).toBe(true);
+    expect((await unwrap(api.GET("/api/eval/report"))).scenarios).toHaveLength(7);
+  });
+
+  it("returns contract errors: 404 for unknown ids, 501 for overrides", async () => {
+    await expect(unwrap(api.GET("/api/incidents/{id}", { params: { path: { id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
+    const res = await api.POST("/api/edges/{id}/decision", { params: { path: { id: "x" } }, body: { decision: "confirm" } });
+    expect(res.response.status).toBe(501);
+    expect(res.error).toMatchObject({ error: "not_implemented" });
+  });
+
+  it("classify returns all three outcomes and validates empty input", async () => {
+    const post = (fd: FormData) => unwrap(api.POST("/api/classify", { body: fd as never, bodySerializer: (b) => b as FormData }));
+    const [known] = await unwrap(api.GET("/api/incidents", { params: { query: { status: "in_campaign" } } }));
+    const loo = new FormData();
+    loo.set("exclude_incident", known!.id);
+    loo.set("text", "synthetic");
+    expect((await post(loo)).outcome).toBe("known_campaign");
+    const video = new FormData();
+    video.append("files", new File(["x"], "clip.mp4", { type: "video/mp4" }));
+    expect((await post(video)).outcome).toBe("needs_review");
+    const url = new FormData();
+    url.set("url", "https://offer.example-scam.test/");
+    expect((await post(url)).outcome).toBe("new_candidate");
+    const err = await post(new FormData()).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiRequestError);
+    expect(err).toMatchObject({ status: 422, code: "validation_error" });
+  });
+});
