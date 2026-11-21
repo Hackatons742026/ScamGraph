@@ -53,7 +53,8 @@ def get_run(run_id: str) -> RunSummary:
 @router.get("/incidents", response_model=list[IncidentSummary])
 def incidents(status: str | None = None, campaign: str | None = None) -> list[IncidentSummary]:
     if repo := live.repository():
-        items = [live.incident(repo, row) for row in repo.list_incidents()]
+        groups = live.group_context(repo)
+        items = [live.incident(repo, row, groups) for row in repo.list_incidents()]
         return [item for item in items if (not status or item.status.value in status.split(","))
                 and (not campaign or item.campaign_id == campaign)]
     item = seed.INCIDENT
@@ -64,7 +65,8 @@ def incident(incident_id: str) -> IncidentDetail:
     if repo := live.repository():
         row = repo.get_incident(incident_id)
         if not row: raise HTTPException(404, "Incident not found")
-        item = live.incident(repo, row)
+        groups = live.group_context(repo)
+        item = live.incident(repo, row, groups)
         artifacts = [live.artifact(a) for a in repo.get_artifacts(incident_id)]
         evidence = [live.evidence(e) for e in repo.get_evidence(incident_id)]
         edges = [live.edge(e) for e in repo.list_edges()
@@ -72,7 +74,7 @@ def incident(incident_id: str) -> IncidentDetail:
         decision_row = next((d for d in repo.list_decisions() if d["incident_id"] == incident_id), None)
         reason_kind = "match" if decision_row and decision_row["outcome"] == "known_campaign" else "coverage"
         decision = Decision(outcome=decision_row["outcome"], campaign_id=decision_row["campaign_id"],
-            campaign_label=decision_row["campaign_id"], reasons=[Reason(kind=reason_kind, text=text, evidence=[])
+            campaign_label=groups["labels"].get(decision_row["campaign_id"]), reasons=[Reason(kind=reason_kind, text=text, evidence=[])
             for text in __import__("json").loads(decision_row["reasons_json"])], decided_at=decision_row["decided_at"]) if decision_row else None
         return IncidentDetail(**item.model_dump(), artifacts=artifacts, funnel=[], evidence=evidence,
             decision=decision, edges=edges)
@@ -106,7 +108,9 @@ def media(media_id: str) -> Response:
 
 @router.get("/campaigns", response_model=list[CampaignSummary])
 def campaigns() -> list[CampaignSummary]:
-    if repo := live.repository(): return [live.campaign(repo, row) for row in repo.list_campaigns()]
+    if repo := live.repository():
+        groups = live.group_context(repo)
+        return [live.campaign(repo, row, groups) for row in repo.list_campaigns()]
     return [seed.CAMPAIGN]
 
 @router.get("/campaigns/{campaign_id}", response_model=CampaignDetail)
@@ -114,8 +118,9 @@ def campaign(campaign_id: str) -> CampaignDetail:
     if repo := live.repository():
         row = next((row for row in repo.list_campaigns() if row["id"] == campaign_id), None)
         if not row: raise HTTPException(404, "Campaign not found")
-        item = live.campaign(repo, row)
-        members = [live.incident(repo, repo.get_incident(i)) for i in item.incident_ids]
+        groups = live.group_context(repo)
+        item = live.campaign(repo, row, groups)
+        members = [live.incident(repo, repo.get_incident(i), groups) for i in item.incident_ids]
         edges = [live.edge(e) for e in repo.list_edges()
                  if e["a_incident"] in item.incident_ids and e["b_incident"] in item.incident_ids]
         return CampaignDetail(**item.model_dump(), members=members, edges=edges, timeline=[])
@@ -136,15 +141,37 @@ def campaign_links(campaign_id: str) -> list[CampaignLink]:
 def graph(campaign: str | None = None, tiers: str | None = None,
           levels: str | None = None) -> GraphResponse:
     if repo := live.repository():
-        items = [live.incident(repo, row) for row in repo.list_incidents()]
-        if campaign: items = [item for item in items if item.campaign_id == campaign]
+        groups = live.group_context(repo)
+        selected_group = groups["rows_by_id"].get(campaign) if campaign else None
+        selected_ids = set(groups["members_by_group"].get(campaign, [])) if campaign else None
+        if campaign and selected_group is None:
+            selected_ids = set()
+        rows = [row for row in repo.list_incidents()
+                if selected_ids is None or row["id"] in selected_ids]
+        items = [live.incident(repo, row, groups) for row in rows]
         edges = [live.edge(row) for row in repo.list_edges()]
         visible_ids = {item.id for item in items}
         edges = [edge for edge in edges if edge.source in visible_ids and edge.target in visible_ids
                  and (not tiers or edge.tier.value in tiers.split(","))
                  and (not levels or edge.level.value in levels.split(","))]
-        return GraphResponse(nodes=[GraphNode(id=item.id, kind="incident", label=item.label,
-            parent=item.campaign_id, outcome=item.outcome, coverage_level=item.coverage.level) for item in items], edges=edges)
+        group_nodes = []
+        for group_id, group_row in groups["rows_by_id"].items():
+            if not visible_ids.intersection(groups["members_by_group"].get(group_id, [])):
+                continue
+            if group_row["level"] == "network":
+                group_nodes.append(GraphNode(id=group_id, kind="network", label=groups["labels"][group_id],
+                    parent=None, outcome=None, coverage_level=None))
+            else:
+                group_nodes.append(GraphNode(id=group_id, kind="campaign", label=groups["labels"][group_id],
+                    parent=groups["network_by_campaign"].get(group_id), outcome=None, coverage_level=None))
+        has_unassigned = any(item.campaign_id is None and item.network_id is None for item in items)
+        if selected_ids is None or has_unassigned:
+            group_nodes.append(GraphNode(id="unassigned", kind="unassigned", label="Unassigned",
+                parent=None, outcome=None, coverage_level=None))
+        incident_nodes = [GraphNode(id=item.id, kind="incident", label=item.label,
+            parent=item.campaign_id or item.network_id or "unassigned", outcome=item.outcome,
+            coverage_level=item.coverage.level) for item in items]
+        return GraphResponse(nodes=[*group_nodes, *incident_nodes], edges=edges)
     if campaign and campaign != seed.CAMPAIGN.id:
         return GraphResponse(nodes=[], edges=[])
     node = GraphNode(id=seed.INCIDENT.id, kind="incident", label=seed.INCIDENT.label,
@@ -175,8 +202,9 @@ async def classify(_request: Request) -> ClassifyResult:
             funnel_step=e.funnel_step, ignored=e.ignored, ignore_reason=e.ignore_reason)
             for i, e in enumerate(bundle.evidence)]
         kind = "match" if result.outcome == "known_campaign" else "conflict" if result.outcome == "needs_review" else "weak"
+        campaign_label = live.group_context(repo)["labels"].get(result.campaign_id) if result.campaign_id else None
         return ClassifyResult(outcome=result.outcome, campaign_id=result.campaign_id,
-            campaign_label=result.campaign_id, reasons=[Reason(kind=kind, text=result.reasons[0], evidence=items)],
+            campaign_label=campaign_label, reasons=[Reason(kind=kind, text=result.reasons[0], evidence=items)],
             coverage=live.coverage(__import__("json").dumps(bundle.coverage.to_dict())), evidence=items,
             candidate_edges=[Edge(id=f"candidate-{i}", source=e.source, target=e.target,
                 level=e.level, tier=e.tier, families=list(e.families), score=e.score,
