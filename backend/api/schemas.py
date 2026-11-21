@@ -38,6 +38,24 @@ class Decision(ContractModel):
     outcome: Outcome; campaign_id: str | None; campaign_label: str | None
     reasons: list[Reason]; decided_at: str
 
+class EdgeDecisionRequest(ContractModel):
+    decision: Literal["confirm", "reject"]
+    note: str | None = None
+
+class EdgeDecisionResponse(ContractModel):
+    edge_id: str
+    decision: Literal["confirm", "reject"]
+    recorded_at: str
+
+class MergeRequest(ContractModel):
+    campaign_ids: list[str]
+    note: str | None = None
+
+class SplitRequest(ContractModel):
+    campaign_id: str
+    incident_ids: list[str]
+    note: str | None = None
+
 class Edge(ContractModel):
     id: str; source: str; target: str; level: Level
     tier: Tier; families: list[str]; score: float; comparable: int

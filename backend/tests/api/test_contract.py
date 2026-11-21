@@ -53,9 +53,14 @@ def test_mutations_media_and_contract_errors():
     for path in ("/api/runs/missing", "/api/incidents/missing", "/api/artifacts/missing",
                  "/api/campaigns/missing", "/api/media/missing"):
         contract_error(client.get(path), 404, "not_found")
-    for method, path in (("post", "/api/edges/x/decision"), ("post", "/api/campaigns/merge"),
-                         ("post", "/api/campaigns/split"), ("get", "/api/exports/camp_demo.csv")):
-        contract_error(getattr(client, method)(path), 501, "http_error")
+    overrides = (
+        ("/api/edges/x/decision", {"decision": "confirm"}),
+        ("/api/campaigns/merge", {"campaign_ids": ["camp_demo", "camp_other"]}),
+        ("/api/campaigns/split", {"campaign_id": "camp_demo", "incident_ids": ["inc_demo"]}),
+    )
+    for path, body in overrides:
+        contract_error(client.post(path, json=body), 501, "http_error")
+    contract_error(client.get("/api/exports/camp_demo.csv"), 501, "http_error")
 
 
 def test_openapi_paths_named_components_and_multipart():
@@ -68,8 +73,42 @@ def test_openapi_paths_named_components_and_multipart():
     components = {"Tier", "Family", "Level", "Outcome", "IncidentStatus", "ArtifactKind",
         "ParseStatus", "FunnelRole", "CoverageLevel", "RunStatus", "ReasonKind", "EvidenceItem",
         "IncidentSummary", "IncidentDetail", "CampaignSummary", "CampaignDetail", "ClassifyResult",
-        "EvalReport", "ErrorResponse"}
+        "EvalReport", "EdgeDecisionRequest", "EdgeDecisionResponse", "MergeRequest", "SplitRequest",
+        "ErrorResponse"}
     assert paths <= set(schema["paths"]) and components <= set(schema["components"]["schemas"])
     assert "application/json" in schema["paths"]["/api/import"]["post"]["requestBody"]["content"]
     multipart = schema["paths"]["/api/classify"]["post"]["requestBody"]["content"]
     assert multipart["multipart/form-data"]["schema"]["properties"]["files"]["items"]["format"] == "binary"
+
+
+def test_override_openapi_declares_parameters_bodies_and_responses():
+    schema = client.get("/openapi.json").json()
+    paths = schema["paths"]
+    edge = paths["/api/edges/{edge_id}/decision"]["post"]
+    assert edge["parameters"] == [{"name": "edge_id", "in": "path", "required": True,
+        "schema": {"type": "string", "title": "Edge Id"}}]
+    operations = [
+        (edge, "EdgeDecisionRequest", "EdgeDecisionResponse"),
+        (paths["/api/campaigns/merge"]["post"], "MergeRequest", "CampaignDetail"),
+        (paths["/api/campaigns/split"]["post"], "SplitRequest", None),
+    ]
+    for operation, request_schema, response_schema in operations:
+        request_ref = operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        assert request_ref.endswith(f"/{request_schema}")
+        success = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        if response_schema:
+            assert success["$ref"].endswith(f"/{response_schema}")
+        else:
+            assert success["type"] == "array"
+            assert success["items"]["$ref"].endswith("/CampaignDetail")
+        for status_code in ("404", "422", "501"):
+            response = operation["responses"][status_code]
+            assert response["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorResponse")
+    models = schema["components"]["schemas"]
+    assert models["EdgeDecisionRequest"]["properties"]["decision"]["enum"] == ["confirm", "reject"]
+    assert "note" not in models["EdgeDecisionRequest"].get("required", [])
+    assert set(models["EdgeDecisionResponse"]["properties"]) == {"edge_id", "decision", "recorded_at"}
+    assert models["MergeRequest"]["properties"]["campaign_ids"]["items"]["type"] == "string"
+    assert models["SplitRequest"]["properties"]["incident_ids"]["items"]["type"] == "string"
+    contract_error(client.post("/api/edges/x/decision", json={"decision": "approve"}),
+                   422, "validation_error")

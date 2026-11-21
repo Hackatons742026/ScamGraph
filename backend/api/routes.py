@@ -218,10 +218,23 @@ async def classify(_request: Request) -> ClassifyResult:
 def evaluation() -> EvalReport:
     return EvalReport.model_validate(build_report())
 
-@router.post("/edges/{edge_id}/decision", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-@router.post("/campaigns/merge", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-@router.post("/campaigns/split", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-def optional_mutation() -> None: raise HTTPException(501, "Optional endpoint not enabled")
+@router.post("/edges/{edge_id}/decision", response_model=EdgeDecisionResponse,
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    responses={200: {"model": EdgeDecisionResponse, "description": "Decision recorded"}})
+def decide_edge(edge_id: str, body: EdgeDecisionRequest) -> EdgeDecisionResponse:
+    raise HTTPException(501, "Optional endpoint not enabled")
+
+@router.post("/campaigns/merge", response_model=CampaignDetail,
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    responses={200: {"model": CampaignDetail, "description": "Merged campaign"}})
+def merge_campaigns(body: MergeRequest) -> CampaignDetail:
+    raise HTTPException(501, "Optional endpoint not enabled")
+
+@router.post("/campaigns/split", response_model=list[CampaignDetail],
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    responses={200: {"model": list[CampaignDetail], "description": "Split campaigns"}})
+def split_campaign(body: SplitRequest) -> list[CampaignDetail]:
+    raise HTTPException(501, "Optional endpoint not enabled")
 
 @router.get("/exports/{name}")
 def export_campaign(name: str) -> Response:
