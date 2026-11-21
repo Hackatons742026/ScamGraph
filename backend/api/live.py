@@ -55,7 +55,14 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
 def coverage(raw: str) -> Coverage:
     value = json.loads(raw or "{}")
     kinds = value.get("kinds_present", [])
-    badges = value.get("kinds_missing", []) + value.get("notes", [])
+    display_names = {"har": "HAR", "html": "HTML", "mhtml": "MHTML",
+        "bundle": "bundle", "image": "images", "video": "video",
+        "adlib_json": "AdLib JSON", "text": "text", "url": "URLs"}
+    badges = [f"no {display_names.get(kind, str(kind).replace('_', ' ').capitalize())}"
+              for kind in value.get("kinds_missing", [])]
+    badges.extend(note for note in value.get("notes", [])
+                  if note in {"no HAR", "video only", "media only"})
+    badges = list(dict.fromkeys(badges))
     return Coverage(artifact_kinds=kinds, has_har="har" in kinds,
         has_page=any(x in kinds for x in ("html", "mhtml", "bundle")),
         has_image="image" in kinds, has_video="video" in kinds,
@@ -72,20 +79,62 @@ def run(row: dict) -> RunSummary:
         unassigned=summary.get("unassigned", 0), needs_review=summary.get("needs_review", 0),
         new_candidates=summary.get("new_candidates", 0),
         secrets_redacted=summary.get("secrets_redacted", 0), error="Import failed" if row["error"] else None)
-def incident(repo: Repository, row: dict) -> IncidentSummary:
-    campaign_ids = {item["id"] for item in repo.list_campaigns() if item["level"] == "campaign"}
-    memberships = {item["incident_id"]: item["campaign_id"] for item in repo.list_membership()
-                   if item["campaign_id"] in campaign_ids}
-    campaign_id = memberships.get(row["id"])
+def group_context(repo: Repository) -> dict:
+    """Index campaign/network membership and create safe display labels."""
+    campaigns = repo.list_campaigns()
+    memberships = repo.list_membership()
+    incidents = sorted(repo.list_incidents(), key=lambda item: (item["first_seen"] or "", item["id"]))
+    incident_labels = {item["id"]: f"Incident {index}"
+                       for index, item in enumerate(incidents, 1)}
+    rows_by_id = {item["id"]: item for item in campaigns}
+    labels: dict[str, str] = {}
+    for level, prefix in (("campaign", "Campaign"), ("network", "Network")):
+        ordered = sorted((item for item in campaigns if item["level"] == level),
+                         key=lambda item: (item["first_seen"] or "", item["id"]))
+        labels.update({item["id"]: f"{prefix} {index}" for index, item in enumerate(ordered, 1)})
+    members_by_group: dict[str, list[str]] = {item["id"]: [] for item in campaigns}
+    campaign_by_incident: dict[str, str] = {}
+    network_by_incident: dict[str, str] = {}
+    for membership in memberships:
+        group_id = membership["campaign_id"]
+        group = rows_by_id.get(group_id)
+        if not group:
+            continue
+        incident_id = membership["incident_id"]
+        members_by_group[group_id].append(incident_id)
+        if group["level"] == "campaign":
+            campaign_by_incident[incident_id] = group_id
+        elif group["level"] == "network":
+            network_by_incident[incident_id] = group_id
+    network_by_campaign = {}
+    for group_id, members in members_by_group.items():
+        if rows_by_id[group_id]["level"] == "campaign":
+            network_id = next((network_by_incident[member] for member in members
+                               if member in network_by_incident), None)
+            network_by_campaign[group_id] = network_id
+    return {"rows_by_id": rows_by_id, "labels": labels,
+        "incident_labels": incident_labels,
+        "members_by_group": members_by_group,
+        "campaign_by_incident": campaign_by_incident,
+        "network_by_incident": network_by_incident,
+        "network_by_campaign": network_by_campaign}
+
+
+def incident(repo: Repository, row: dict, groups: dict | None = None) -> IncidentSummary:
+    groups = groups or group_context(repo)
+    campaign_id = groups["campaign_by_incident"].get(row["id"])
+    network_id = groups["network_by_incident"].get(row["id"])
+    label = groups["incident_labels"].get(row["id"], "Incident")
     decision = next((item for item in repo.list_decisions() if item["incident_id"] == row["id"]), None)
     reasons = json.loads(decision["reasons_json"]) if decision else []
     artifacts = repo.get_artifacts(row["id"])
     outcome = decision["outcome"] if decision else None
     status = "in_campaign" if campaign_id else outcome or "unassigned"
-    return IncidentSummary(id=row["id"], label="Incident",
+    return IncidentSummary(id=row["id"], label=label,
         first_seen=row["first_seen"], last_seen=row["last_seen"], artifact_count=len(artifacts),
         coverage=coverage(row["coverage_json"]), status=status, campaign_id=campaign_id,
-        campaign_label=campaign_id, network_id=None, outcome=outcome,
+        campaign_label=groups["labels"].get(campaign_id) if campaign_id else None,
+        network_id=network_id, outcome=outcome,
         reason_summary=reasons[0] if reasons else None)
 def evidence(row: dict) -> EvidenceItem:
     return EvidenceItem(id=f"evidence-{row['id']}", type=row["type"], tier=row["tier"],
@@ -106,14 +155,28 @@ def edge(row: dict) -> Edge:
     tiers = [item.get("tier", "C") for item in raw]
     families = sorted({item["family"] for item in raw if item.get("family")})
     tier = "A" if "A" in tiers else "B" if "B" in tiers else "C"
+    items = [EvidenceItem(id=f"{row['id']}-evidence-{index}", type=item["type"],
+        tier=item.get("tier", "C"), family=item.get("family"), display=item.get("display", ""),
+        weight=item.get("weight", 0.0), artifact_id=next(iter(item.get("artifact_ids", [])), ""),
+        funnel_step=next(iter(item.get("funnel_steps", [])), None), ignored=False,
+        ignore_reason=None, detail=item.get("detail")) for index, item in enumerate(raw)]
     return Edge(id=row["id"], source=row["a_incident"], target=row["b_incident"],
         level=row["level"], tier=tier, families=families, score=row["score"],
-        comparable=row["comparable"], low_confidence=row["comparable"] < 2, evidence=[])
-def campaign(repo: Repository, row: dict) -> CampaignSummary:
-    members = [m["incident_id"] for m in repo.list_membership() if m["campaign_id"] == row["id"]]
-    return CampaignSummary(id=row["id"], label=row["label"], level=row["level"], size=len(members),
-        incident_ids=members, first_seen=row["first_seen"], last_seen=row["last_seen"],
-        strongest_evidence=None, network_id=None)
+        comparable=row["comparable"], low_confidence=row["comparable"] < 2, evidence=items)
+def campaign(repo: Repository, row: dict, groups: dict | None = None) -> CampaignSummary:
+    groups = groups or group_context(repo)
+    members = sorted(groups["members_by_group"].get(row["id"], []))
+    member_rows = [repo.get_incident(identifier) for identifier in members]
+    seen = [item[key] for item in member_rows if item for key in ("first_seen", "last_seen") if item[key]]
+    candidate_evidence = [item for identifier in members for item in repo.get_evidence(identifier)
+                          if not item["ignored"]]
+    strongest = max(candidate_evidence, key=lambda item: (
+        {"A": 3, "B": 2, "C": 1}.get(item["tier"], 0), item["weight"], -item["id"])) if candidate_evidence else None
+    return CampaignSummary(id=row["id"], label=groups["labels"].get(row["id"], row["label"]),
+        level=row["level"], size=len(members), incident_ids=members,
+        first_seen=min(seen) if seen else None, last_seen=max(seen) if seen else None,
+        strongest_evidence=evidence(strongest) if strongest else None,
+        network_id=groups["network_by_campaign"].get(row["id"]))
 def safe_media_path(row: dict) -> Path:
     path = Path(row.get("path") or "").resolve()
     roots = [Path(value).resolve() for key in ("SCAMGRAPH_DATA_DIR", "SCAMGRAPH_CACHE_DIR")

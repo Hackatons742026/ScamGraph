@@ -7,7 +7,7 @@ from backend.api.main import app
 from backend.api.live import stable_campaign
 from backend.db import Repository
 from backend.exports.formats import render_csv, render_html
-from backend.engine.linking import LinkEdge
+from backend.engine.linking import LinkEdge, MatchedEvidence
 from backend.engine.memory import Campaign, classify, cluster_incidents
 from backend.pipeline.models import Artifact, Coverage, Evidence, Incident, MediaRef
 client = TestClient(app)
@@ -63,6 +63,76 @@ def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
         "known_campaign", "new_candidate", "needs_review"}
     huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 10_000_001)})
     assert huge.status_code == 413 and huge.json()["error"] == "http_error"
+
+def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "quality.db"))
+    repo = Repository(tmp_path / "quality.db")
+    dates = {
+        "inc-a": ("2026-01-02T00:00:00+00:00", "2026-01-03T00:00:00+00:00"),
+        "inc-b": ("2026-01-01T00:00:00+00:00", "2026-01-04T00:00:00+00:00"),
+        "inc-c": ("2026-01-05T00:00:00+00:00", "2026-01-05T00:00:00+00:00"),
+        "inc-unassigned": (None, None),
+    }
+    for identifier, (first_seen, last_seen) in dates.items():
+        coverage = Coverage(kinds_present=["video"], kinds_missing=["har", "html"],
+                            notes=["no HAR", "video only", "evidence_types=1"])
+        repo.save_incident(Incident(identifier, "PRIVATE_FOLDER", title="PRIVATE_TITLE",
+            first_seen=first_seen, last_seen=last_seen, coverage=coverage))
+    for identifier in ("inc-a", "inc-b"):
+        artifact = Artifact(f"art-{identifier}", identifier, "har", "private/path.har",
+                            parse_status="ok")
+        repo.save_artifacts([artifact])
+        evidence_rows = [Evidence("pixel_id", "A", None, "shared-hash",
+            "pixel-****12", weight=3.0, artifact_id=artifact.id, funnel_step=1)]
+        if identifier == "inc-a":
+            evidence_rows.append(Evidence("click_domain", "B", "tds", "secondary-hash",
+                "go.****.test", weight=99.0, artifact_id=artifact.id, funnel_step=1))
+        repo.save_evidence(identifier, evidence_rows)
+    matched = MatchedEvidence("pixel_id", "A", None, "pixel-****12", "shared-hash", 3.0,
+                              ("art-inc-a", "art-inc-b"), (1,), "exact hash match")
+    edge = LinkEdge("inc-a", "inc-b", "campaign", "A", (), 3.0, 1, False, (matched,))
+    repo.save_analysis([edge], [
+        Campaign("campaign-x", "campaign", ("inc-a", "inc-b"), ("pixel_id",), ()),
+        Campaign("network-x", "network", ("inc-a", "inc-b", "inc-c"), ("pixel_id",), ()),
+    ])
+
+    incidents = {item["id"]: item for item in client.get("/api/incidents").json()}
+    assert incidents["inc-a"]["label"].startswith("Incident ")
+    assert len({item["label"] for item in incidents.values()}) == len(incidents)
+    assert "PRIVATE" not in incidents["inc-a"]["label"]
+    assert incidents["inc-a"]["campaign_label"] == "Campaign 1"
+    assert incidents["inc-a"]["network_id"] == "network-x"
+    assert incidents["inc-c"]["campaign_id"] is None
+    assert incidents["inc-c"]["network_id"] == "network-x"
+    assert incidents["inc-c"]["coverage"]["badges"] == ["no HAR", "no HTML", "video only"]
+
+    campaigns = {item["id"]: item for item in client.get("/api/campaigns").json()}
+    campaign = campaigns["campaign-x"]
+    assert campaign["label"] == "Campaign 1" and campaign["network_id"] == "network-x"
+    assert campaign["first_seen"] == dates["inc-b"][0]
+    assert campaign["last_seen"] == dates["inc-b"][1]
+    assert campaign["strongest_evidence"]["type"] == "pixel_id"
+    assert campaign["strongest_evidence"]["display"] == "pixel-****12"
+    network = campaigns["network-x"]
+    assert network["label"] == "Network 1"
+    assert network["first_seen"] == dates["inc-b"][0]
+    assert network["last_seen"] == dates["inc-c"][1]
+    assert network["strongest_evidence"]["type"] == "pixel_id"
+
+    graph = client.get("/api/graph").json()
+    nodes = {node["id"]: node for node in graph["nodes"]}
+    assert {"campaign", "network", "unassigned"} <= {node["kind"] for node in graph["nodes"]}
+    assert nodes["campaign-x"]["label"] == "Campaign 1"
+    assert nodes["campaign-x"]["parent"] == "network-x"
+    assert nodes["inc-a"]["parent"] == "campaign-x"
+    assert nodes["inc-c"]["parent"] == "network-x"
+    assert nodes["inc-unassigned"]["parent"] == "unassigned"
+    assert graph["edges"][0]["evidence"][0]["display"] == "pixel-****12"
+
+    network_graph = client.get("/api/graph", params={"campaign": "network-x"}).json()
+    network_ids = {node["id"] for node in network_graph["nodes"]}
+    assert {"inc-a", "inc-b", "inc-c", "campaign-x", "network-x"} <= network_ids
+    assert "inc-unassigned" not in network_ids
 
 def test_campaign_exports_are_masked_downloads(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "export.db"))
