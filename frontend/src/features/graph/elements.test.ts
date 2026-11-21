@@ -59,9 +59,10 @@ describe("toElements", () => {
     const node = (id: string, parent: string | null) => ({ id, kind: "campaign" as const, label: id, parent, outcome: null, coverage_level: null });
     const edge = (id: string, source: string, target: string) => ({ id, source, target, level: "network" as const, tier: "C" as const, families: [], score: 1, comparable: 2, low_confidence: false, evidence: [] });
     const out = toElements({
-      nodes: [node("a", "b"), node("b", "a"), node("self", "self"), node("child", "a"), node("a", null)],
-      edges: [edge("x", "a", "b"), edge("x", "b", "a"), edge("child", "a", "b")],
+      nodes: [node("a", "b"), node("b", "a"), node("self", "self"), node("child", "a"), node("a", null), node("", null)],
+      edges: [edge("x", "a", "b"), edge("x", "b", "a"), edge("child", "a", "b"), edge("", "a", "b"), edge("to_empty", "a", "")],
     });
+    expect(out.some((e) => e.data.id === "" || e.data.id === "to_empty")).toBe(false);
     expect(out.filter((e) => e.data.id === "a")).toHaveLength(1);
     expect(out.filter((e) => e.data.id === "x")).toEqual([expect.objectContaining({ data: expect.objectContaining({ source: "a", target: "b" }) })]);
     expect(out.filter((e) => e.data.id === "child")).toHaveLength(1);

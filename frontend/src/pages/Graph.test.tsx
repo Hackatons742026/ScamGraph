@@ -18,16 +18,19 @@ vi.mock("cytoscape", () => {
   const instance = {
     on: (ev: string, sel: string, fn: (e: { target: { id: () => string } }) => void) => { cy.handlers[`${ev} ${sel}`] = fn; },
     destroy: () => { cy.destroyed += 1; },
+    add: (elements: unknown[]) => {
+      if (cy.failNext) {
+        cy.failNext = false;
+        throw new Error("Can not create edge with nonexistant source");
+      }
+      cy.lastElements = elements;
+    },
+    layout: () => ({ run: () => {} }),
     edges: () => ({ unselect: () => {} }),
     getElementById: () => ({ select: () => {} }),
   };
-  const factory = (opts: { elements: unknown[] }) => {
-    if (cy.failNext) {
-      cy.failNext = false;
-      throw new Error("Can not create edge with nonexistant source");
-    }
+  const factory = () => {
     cy.created += 1;
-    cy.lastElements = opts.elements;
     return instance;
   };
   return { default: Object.assign(factory, { use: () => {} }) };
@@ -138,7 +141,7 @@ describe("Investigation graph", () => {
     expect(legend()).toBeInTheDocument();
   });
 
-  it("keeps the link table usable when Cytoscape rejects the data", async () => {
+  it("keeps the link table usable when Cytoscape rejects the data, without leaking, and draws again on the next graph", async () => {
     // React reports the caught error via console.error and (in dev) a window "error" event that jsdom prints.
     vi.spyOn(console, "error").mockImplementation(() => {});
     const silence = (e: ErrorEvent) => e.preventDefault();
@@ -147,7 +150,28 @@ describe("Investigation graph", () => {
     renderApp("/graph");
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not be drawn/);
     expect(linkRows()).toHaveLength(edges.length);
+    expect(cy.destroyed).toBe(1);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Tier C" }));
+    expect(await screen.findByRole("img", { name: "Investigation graph" })).toBeInTheDocument();
+    expect(screen.queryByText(/could not be drawn/)).not.toBeInTheDocument();
+    expect(cy.created).toBe(2);
     window.removeEventListener("error", silence);
+  });
+
+  it("moves focus to the evidence panel and back to its opener; the Evidence button toggles", async () => {
+    renderApp("/graph");
+    await screen.findByRole("table");
+    const button = within(linkRows()[0]!).getByRole("button");
+    await userEvent.click(button);
+    expect(panel()).toHaveFocus();
+    await userEvent.click(within(panel()!).getByRole("button", { name: "Close link evidence" }));
+    expect(panel()).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+    await userEvent.click(button);
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(button);
+    expect(panel()).not.toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-pressed", "false");
   });
 
   it("links every incident from the table view, including incidents without links", async () => {
@@ -160,16 +184,21 @@ describe("Investigation graph", () => {
     expect(hrefs(screen.getByText(/Not linked under these filters/))).toEqual(unlinked.map((n) => `/incidents/${n.id}`));
   });
 
-  it("clears the selected link when the focus changes, also after going back", async () => {
+  it("clears the selected link when the focus changes, in both directions", async () => {
     const { router } = renderApp("/graph?campaign=camp_alpha");
     await screen.findByRole("table");
+    await userEvent.click(screen.getByRole("link", { name: "show all" }));
+    await waitFor(() => expect(linkRows()).toHaveLength(edges.length));
+    // A link that also exists in the focused view: without the reset its panel would follow us back.
+    await userEvent.click(within(linkRows().find((r) => r.textContent?.includes("Alpha-1"))!).getByRole("button"));
+    expect(panel()).toBeInTheDocument();
+    await act(() => router.navigate(-1));
+    await waitFor(() => expect(linkRows()).toHaveLength(1));
+    expect(panel()).not.toBeInTheDocument();
     await userEvent.click(within(linkRows()[0]!).getByRole("button"));
     expect(panel()).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "show all" }));
     await waitFor(() => expect(linkRows()).toHaveLength(edges.length));
-    expect(panel()).not.toBeInTheDocument();
-    await act(() => router.navigate(-1));
-    await waitFor(() => expect(router.state.location.search).toBe("?campaign=camp_alpha"));
     expect(panel()).not.toBeInTheDocument();
   });
 
