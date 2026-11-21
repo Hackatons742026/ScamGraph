@@ -10,14 +10,16 @@ Campaign profiles contain member IDs and the safe evidence types and families
 seen on internal edges. Stable IDs derive from the first sorted member; they do
 not encode real-world identity or attribution.
 
-Campaign Memory is conservative:
+Campaign Memory is conservative. A Known Campaign decision requires a campaign
+edge to a member and either a tier-A match or at least two comparable evidence
+types. A network-only edge is not a campaign match.
 
-- **Known Campaign:** a tier-A edge to exactly one campaign, or a campaign edge
-  with at least two comparable evidence types.
+- **Known Campaign:** a qualifying campaign edge to exactly one campaign.
 - **New Campaign Candidate:** sufficient coverage and comparability, but no
   campaign-level match. A network-only link is allowed.
 - **Needs Review:** low coverage, fewer than two comparable types, or strong
   matches to multiple campaigns.
 
-`exclude_incident` removes an incident and its edges before rebuilding clusters,
-supporting leave-one-out evaluation without hard-coded case IDs.
+`exclude_incident` removes an incident from the memory and ignores its edges
+while classifying it. Cluster IDs are deterministic from sorted synthetic or
+local member IDs; they are technical keys, not identity claims.
