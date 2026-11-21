@@ -3,8 +3,8 @@ import type { Edge, GraphNode } from "@/api/types";
 import { TierBadge } from "@/components/domain/badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EvidenceList } from "@/features/incident/EvidenceList";
 import { FAMILY } from "@/lib/domain";
+import { LinkEvidence } from "./LinkEvidence";
 
 type Props = { edge: Edge; nodes: GraphNode[]; onClose: () => void };
 
@@ -31,7 +31,7 @@ export function EdgePanel({ edge, nodes, onClose }: Props) {
       {edge.level === "network" && edge.families.length === 1 && edge.families[0] === "kit" && (
         <p className="text-xs text-slate-600">A shared site kit alone means shared tooling: a network link only. Whether these are one campaign is left to the analyst.</p>
       )}
-      <EvidenceList evidence={edge.evidence} artifacts={[]} />
+      <LinkEvidence evidence={edge.evidence} />
     </aside>
   );
 }

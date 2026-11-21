@@ -1,11 +1,16 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as client from "@/api/client";
+import { ApiRequestError } from "@/api/client";
 import { campaigns } from "@/mocks/data";
-import { setMockScenario } from "@/mocks/handlers";
 import { renderApp } from "@/test/render";
 
 const rows = () => within(screen.getByRole("table")).getAllByRole("row").slice(1);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("Campaigns", () => {
   it("lists campaigns and networks by size with their strongest evidence", async () => {
@@ -36,12 +41,12 @@ describe("Campaigns", () => {
   });
 
   it("shows empty and error states", async () => {
-    setMockScenario("empty");
+    vi.spyOn(client, "unwrap").mockResolvedValueOnce([]);
     const { unmount } = renderApp("/campaigns");
     expect(await screen.findByText(/No campaigns yet/)).toBeInTheDocument();
     unmount();
-    setMockScenario("error");
+    vi.spyOn(client, "unwrap").mockRejectedValueOnce(new ApiRequestError(500, { error: "server_error", detail: "Campaigns unavailable" }));
     renderApp("/campaigns");
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Campaigns unavailable/);
   });
 });

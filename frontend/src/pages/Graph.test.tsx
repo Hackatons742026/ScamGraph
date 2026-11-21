@@ -1,8 +1,9 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as client from "@/api/client";
+import { ApiRequestError } from "@/api/client";
 import { edges, graph } from "@/mocks/data";
-import { setMockScenario } from "@/mocks/handlers";
 import { renderApp } from "@/test/render";
 
 // jsdom has no canvas: replace Cytoscape with a stub that records elements and tap handlers.
@@ -28,6 +29,10 @@ const tap = (sel: string, id: string) =>
     cy.handlers[`tap ${sel}`]!({ target: { id: () => id } });
   });
 const linkRows = () => within(screen.getByRole("table")).getAllByRole("row").slice(1);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("Investigation graph", () => {
   it("renders the canvas, an always-visible legend and a table view of every link", async () => {
@@ -84,12 +89,12 @@ describe("Investigation graph", () => {
   });
 
   it("shows empty and error states", async () => {
-    setMockScenario("empty");
+    vi.spyOn(client, "unwrap").mockResolvedValueOnce({ nodes: [], edges: [] });
     const { unmount } = renderApp("/graph");
     expect(await screen.findByText(/No incidents to show yet/)).toBeInTheDocument();
     unmount();
-    setMockScenario("error");
+    vi.spyOn(client, "unwrap").mockRejectedValueOnce(new ApiRequestError(500, { error: "server_error", detail: "Graph unavailable" }));
     renderApp("/graph");
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Synthetic outage/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Graph unavailable/);
   });
 });
