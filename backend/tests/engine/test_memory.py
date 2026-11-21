@@ -60,7 +60,7 @@ def test_non_a_campaign_edge_needs_two_comparable_types():
 def test_classify_ignores_edges_not_incident_to_candidate():
     base = cluster_incidents("ab", [edge("a", "b")])
     result = classify("new", [edge("a", "b", tier="A")], base, coverage_ok=True)
-    assert result.outcome != "known_campaign"
+    assert result.outcome == "new_candidate"
 
 
 def test_classify_ignores_excluded_reference_match():
@@ -69,4 +69,4 @@ def test_classify_ignores_excluded_reference_match():
         "new", [edge("new", "a", tier="A")], base,
         coverage_ok=True, exclude_incident="a",
     )
-    assert result.outcome == "needs_review"
+    assert result.outcome == "new_candidate"

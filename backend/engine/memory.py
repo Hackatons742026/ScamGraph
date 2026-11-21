@@ -149,12 +149,14 @@ def classify(
 ) -> Classification:
     matches: dict[str, list[LinkEdge]] = defaultdict(list)
     maximum_comparable = 0
+    relevant_edges = 0
     for edge in candidate_edges:
         if candidate_id not in {edge.source, edge.target}:
             continue
         other = edge.target if edge.source == candidate_id else edge.source
         if other == candidate_id or other == exclude_incident:
             continue
+        relevant_edges += 1
         maximum_comparable = max(maximum_comparable, edge.comparable)
         campaign_id = clusters.campaign_by_incident.get(other)
         strong = edge.level == "campaign" and (edge.tier == "A" or edge.comparable >= 2)
@@ -167,6 +169,6 @@ def classify(
         campaign_id, matching = next(iter(matches.items()))
         strongest = "tier A" if any(edge.tier == "A" for edge in matching) else "multiple evidence families"
         return Classification("known_campaign", campaign_id, (f"Known campaign match via {strongest}.",))
-    if not coverage_ok or (candidate_edges and maximum_comparable < 2):
+    if not coverage_ok or (relevant_edges and maximum_comparable < 2):
         return Classification("needs_review", None, ("Coverage is too low for a reliable campaign decision.",))
     return Classification("new_candidate", None, ("No campaign-level match was found with sufficient coverage.",))
