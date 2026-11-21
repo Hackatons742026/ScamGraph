@@ -25,7 +25,9 @@ def repository() -> Repository | None:
 def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     started = datetime.now(timezone.utc).isoformat()
     try:
+        repo.save_run(run_id, "running", started)
         summary = run_on_data_dir(data_dir, db_path=repo.path)
+        repo.delete_run(summary["run_id"])
         grouped: dict[str, list[Evidence]] = {row["id"]: [] for row in repo.list_incidents()}
         for row in repo.list_evidence():
             grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"],
@@ -33,9 +35,20 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
                 row["funnel_step"], bool(row["ignored"]), row["ignore_reason"]))
         edges = link_incidents(grouped)
         clusters = cluster_incidents(grouped, edges)
-        repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns])
+        now = datetime.now(timezone.utc).isoformat()
+        decisions = [{"incident_id": identifier,
+            "outcome": "known_campaign" if identifier in clusters.campaign_by_incident else "new_candidate",
+            "campaign_id": clusters.campaign_by_incident.get(identifier), "reasons": [], "decided_at": now}
+            for identifier in grouped]
+        repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns], decisions)
+        stats: dict[str, dict[str, int]] = {}
+        for identifier in grouped:
+            for item in repo.get_artifacts(identifier):
+                value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0})
+                value["total"] += 1; value["failed" if item["parse_status"] == "failed" else "parsed"] += 1
         summary.update(campaigns=len(clusters.campaigns), networks=len(clusters.networks),
-                       unassigned=len(clusters.unassigned))
+            unassigned=len(clusters.unassigned), new_candidates=len(clusters.unassigned), needs_review=0,
+            artifacts_by_kind=stats)
         repo.save_run(run_id, "done", started, finished_at=datetime.now(timezone.utc).isoformat(), summary=summary)
     except Exception as exc:  # background job boundary
         repo.save_run(run_id, "failed", started, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc)[:500])
@@ -55,22 +68,26 @@ def run(row: dict) -> RunSummary:
     artifacts = sum(item.get("artifacts", 0) for item in summary.get("details", []))
     return RunSummary(id=row["id"], status=row["status"], started_at=row["started_at"],
         finished_at=row["finished_at"], incidents=summary.get("incidents", 0), artifacts=artifacts,
-        artifacts_by_kind={}, unique_artifacts=artifacts, duplicates=0,
+        artifacts_by_kind=summary.get("artifacts_by_kind", {}), unique_artifacts=artifacts,
+        duplicates=summary.get("duplicates", 0),
         campaigns=summary.get("campaigns", 0), networks=summary.get("networks", 0),
         unassigned=summary.get("unassigned", 0), needs_review=summary.get("needs_review", 0),
-        new_candidates=summary.get("new_candidates", 0), secrets_redacted=0, error=row["error"])
+        new_candidates=summary.get("new_candidates", 0),
+        secrets_redacted=summary.get("secrets_redacted", 0), error=row["error"])
 
 def incident(repo: Repository, row: dict) -> IncidentSummary:
     campaign_ids = {item["id"] for item in repo.list_campaigns() if item["level"] == "campaign"}
     memberships = {item["incident_id"]: item["campaign_id"] for item in repo.list_membership()
                    if item["campaign_id"] in campaign_ids}
     campaign_id = memberships.get(row["id"])
+    decision = next((item for item in repo.list_decisions() if item["incident_id"] == row["id"]), None)
     artifacts = repo.get_artifacts(row["id"])
-    status = "in_campaign" if campaign_id else "unassigned"
-    return IncidentSummary(id=row["id"], label=row["title"] or "Incident",
+    outcome = decision["outcome"] if decision else None
+    status = "in_campaign" if campaign_id else outcome or "unassigned"
+    return IncidentSummary(id=row["id"], label="Incident",
         first_seen=row["first_seen"], last_seen=row["last_seen"], artifact_count=len(artifacts),
         coverage=coverage(row["coverage_json"]), status=status, campaign_id=campaign_id,
-        campaign_label=campaign_id, network_id=None, outcome=None)
+        campaign_label=campaign_id, network_id=None, outcome=outcome)
 
 def evidence(row: dict) -> EvidenceItem:
     return EvidenceItem(id=f"evidence-{row['id']}", type=row["type"], tier=row["tier"],
@@ -83,7 +100,7 @@ def artifact(row: dict) -> ArtifactSummary:
     if row["error"] and "observations=" in row["error"]:
         observations = int(row["error"].rsplit("observations=", 1)[1].split(";", 1)[0])
     return ArtifactSummary(id=row["id"], kind=row["kind"],
-        name_display=Path(row["path"]).name, funnel_step=row["funnel_step"],
+        name_display=f"Artifact.{row['kind']}", funnel_step=row["funnel_step"],
         role=row["role"] or "unknown", parse_status=row["parse_status"] or "partial",
         error=row["error"], captured_at=row["captured_at"], duplicate_of=None,
         observations=observations)

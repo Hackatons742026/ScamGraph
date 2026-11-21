@@ -61,8 +61,11 @@ def incident(incident_id: str) -> IncidentDetail:
         evidence = [live.evidence(e) for e in repo.get_evidence(incident_id)]
         edges = [live.edge(e) for e in repo.list_edges()
                  if incident_id in {e["a_incident"], e["b_incident"]}]
+        decision_row = next((d for d in repo.list_decisions() if d["incident_id"] == incident_id), None)
+        decision = Decision(outcome=decision_row["outcome"], campaign_id=decision_row["campaign_id"],
+            campaign_label=decision_row["campaign_id"], reasons=[], decided_at=decision_row["decided_at"]) if decision_row else None
         return IncidentDetail(**item.model_dump(), artifacts=artifacts, funnel=[], evidence=evidence,
-            decision=None, edges=edges)
+            decision=decision, edges=edges)
     if incident_id != seed.INCIDENT.id: raise HTTPException(404, "Incident not found")
     return seed.INCIDENT_DETAIL
 
@@ -75,8 +78,7 @@ def artifact(artifact_id: str) -> ArtifactDetail:
         media = repo.list_media(artifact_id)
         return ArtifactDetail(**item.model_dump(), pages=[], redirect_chain=[], media=[Media(
             id=m["id"], kind=m["kind"] if m["kind"] in {"screenshot", "frame", "image"} else "image",
-            frame_ts=m["frame_ts"], ocr_text=m["ocr_text"], width=0, height=0) for m in media],
-            ocr_text=next((m["ocr_text"] for m in media if m["ocr_text"]), None),
+            frame_ts=m["frame_ts"], ocr_text=None, width=0, height=0) for m in media], ocr_text=None,
             request_count=0, hosts_display=[])
     if artifact_id != seed.ARTIFACT.id: raise HTTPException(404, "Artifact not found")
     return seed.ARTIFACT_DETAIL

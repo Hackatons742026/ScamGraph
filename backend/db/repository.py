@@ -121,6 +121,12 @@ class Repository:
             row = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
         return dict(row) if row else None
 
+    def delete_run(self, run_id: str) -> None:
+        with self._connection() as db: db.execute("DELETE FROM runs WHERE id=?", (run_id,))
+
+    def list_decisions(self) -> list[dict[str, Any]]:
+        with self._connection() as db: return [dict(row) for row in db.execute("SELECT * FROM decisions ORDER BY incident_id")]
+
     def latest_run(self) -> dict[str, Any] | None:
         with self._connection() as db:
             row = db.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 1").fetchone()

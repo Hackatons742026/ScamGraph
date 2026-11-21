@@ -1,14 +1,10 @@
 from fastapi.testclient import TestClient
-
 from backend.api.main import app
 from backend.db import Repository
 from backend.engine.linking import LinkEdge
 from backend.engine.memory import Campaign
 from backend.pipeline.models import Artifact, Coverage, Evidence, Incident, MediaRef
-
 client = TestClient(app)
-
-
 def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     db = tmp_path / "live.db"
     media_path = tmp_path / "cache" / "frame.png"
@@ -32,7 +28,6 @@ def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     network = Campaign("network-inc-a", "network", ("inc-a", "inc-b"), (), ())
     repo.save_analysis([edge], [campaign, network])
     repo.save_run("run-live", "done", "2026-01-01T00:00:00Z", summary={"incidents": 2})
-
     assert client.get("/api/runs/latest").json()["id"] == "run-live"
     assert len(client.get("/api/incidents").json()) == 2
     detail = client.get("/api/incidents/inc-a").json()
@@ -44,16 +39,12 @@ def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     outside = tmp_path / "outside.png"; outside.write_bytes(b"unsafe")
     repo.save_media([MediaRef("media-outside", "art-inc-a", "image", "sha2", path=str(outside))])
     assert client.get("/api/media/media-outside").status_code == 404
-
-
 def test_live_import_requires_configured_data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "live.db"))
     monkeypatch.delenv("SCAMGRAPH_DATA_DIR", raising=False)
     assert client.get("/api/runs/latest").status_code == 404
     response = client.post("/api/import", json={})
     assert response.status_code == 422 and response.json()["error"] == "validation_error"
-
-
 def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "live.db"))
     monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(tmp_path / "cache"))
