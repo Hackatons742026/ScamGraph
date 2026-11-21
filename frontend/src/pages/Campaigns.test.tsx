@@ -48,8 +48,8 @@ describe("Campaigns", () => {
     renderApp("/campaigns");
     await screen.findByRole("table");
     const cells = (label: string) => within(screen.getByRole("link", { name: label }).closest("tr")!).getAllByRole("cell").map((c) => c.textContent);
-    expect(cells(full.label).slice(4)).toEqual(["2026-10-30", "2026-11-02"]);
-    expect(cells("Bare campaign").slice(3)).toEqual(["—", "—", "—"]);
+    expect(cells(full.label).slice(4, 6)).toEqual(["2026-10-30", "2026-11-02"]);
+    expect(cells("Bare campaign").slice(3, 6)).toEqual(["—", "—", "—"]);
   });
 
   it("shows empty and error states", async () => {
