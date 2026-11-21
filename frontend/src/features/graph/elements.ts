@@ -38,9 +38,9 @@ function safeParents(nodes: GraphResponse["nodes"]): Map<string, string | undefi
   return parentOf;
 }
 
-/** Cytoscape elements from an untrusted response: duplicate ids (first wins), dangling edges and parent cycles are dropped. */
+/** Cytoscape elements from an untrusted response: empty or duplicate ids (first wins), dangling edges and parent cycles are dropped. */
 export function toElements(graph: GraphResponse): ElementDefinition[] {
-  const unique = graph.nodes.filter((n, i, all) => all.findIndex((m) => m.id === n.id) === i);
+  const unique = graph.nodes.filter((n, i, all) => n.id !== "" && all.findIndex((m) => m.id === n.id) === i);
   const parentOf = safeParents(unique);
   const nodes: ElementDefinition[] = unique.map((n) => {
     const parent = parentOf.get(n.id);
@@ -53,7 +53,7 @@ export function toElements(graph: GraphResponse): ElementDefinition[] {
   const used = new Set(parentOf.keys());
   const edges: ElementDefinition[] = [];
   for (const e of graph.edges) {
-    if (used.has(e.id) || !parentOf.has(e.source) || !parentOf.has(e.target)) continue;
+    if (!e.id || used.has(e.id) || !parentOf.has(e.source) || !parentOf.has(e.target)) continue;
     used.add(e.id);
     edges.push({ group: "edges", data: { id: e.id, source: e.source, target: e.target, tier: e.tier, level: e.level, ...edgeVisual(e) } });
   }

@@ -60,17 +60,17 @@ export function Graph() {
             </QueryState>
           )}
         </div>
-        {/* Directly after the canvas on narrow screens, sticky beside it on wide ones: a tapped link's evidence is always in view. */}
-        <div className="flex flex-col gap-4 xl:sticky xl:top-4 xl:self-start">
+        {/* Narrow: right after the canvas. Wide: spans canvas and table rows and stays sticky, so the panel is beside whatever opened it. */}
+        <div className="flex flex-col gap-4 xl:sticky xl:top-4 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-start">
           {data && selectedEdge && <EdgePanel edge={selectedEdge} nodes={data.nodes} onClose={() => select(null)} />}
           <Legend />
         </div>
+        {data && (
+          <div className="min-w-0 xl:col-start-1 xl:row-start-2">
+            <EdgeTable edges={data.edges} nodes={data.nodes} selectedId={selected} onSelect={select} />
+          </div>
+        )}
       </div>
-      {data && (
-        <div className="mt-4">
-          <EdgeTable edges={data.edges} nodes={data.nodes} selectedId={selected} onSelect={select} />
-        </div>
-      )}
     </>
   );
 }

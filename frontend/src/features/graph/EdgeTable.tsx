@@ -4,7 +4,7 @@ import { TierBadge } from "@/components/domain/badges";
 import { FAMILY } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
-type Props = { edges: Edge[]; nodes: GraphNode[]; selectedId: string | null; onSelect: (id: string) => void };
+type Props = { edges: Edge[]; nodes: GraphNode[]; selectedId: string | null; onSelect: (id: string | null) => void };
 
 const incidentHref = (id: string) => `/incidents/${encodeURIComponent(id)}`;
 
@@ -36,7 +36,7 @@ export function EdgeTable({ edges, nodes, selectedId, onSelect }: Props) {
                   {e.families.map((f) => FAMILY[f as keyof typeof FAMILY]?.label ?? f).join(" + ") || "—"} · {e.comparable} comparable
                 </td>
                 <td className="py-1.5 text-right">
-                  <button type="button" onClick={() => onSelect(e.id)} aria-pressed={selectedId === e.id}
+                  <button type="button" onClick={() => onSelect(selectedId === e.id ? null : e.id)} aria-pressed={selectedId === e.id}
                     aria-label={`Evidence for ${label(e.source)} ↔ ${label(e.target)}`} className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline">
                     Evidence
                   </button>
