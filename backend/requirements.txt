@@ -7,3 +7,5 @@ pytest>=8,<10
 Pillow>=10,<12
 pytesseract>=0.3.10,<1
 ImageHash>=4.3,<5
+# Heavy optional stacks (EasyOCR / torch / faster-whisper): see requirements-optional.txt
+# Licence notes for runtime deps belong in LICENSES.md (co-8 final pass).
