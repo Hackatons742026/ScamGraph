@@ -121,14 +121,31 @@ def loo_report(rows: Sequence[tuple[str, str, str]]) -> dict:
         "rows": values, "confusion": confusion(expected, predicted)}
 
 
+def synthetic_loo() -> list[tuple[str, str, str]]:
+    """Hold out each synthetic incident, rebuild memory, then classify it."""
+    ids = ["loo-a", "loo-b", "loo-c", "loo-new", "loo-review"]
+    edges = [_edge("loo-a", "loo-b"), _edge("loo-a", "loo-c"), _edge("loo-b", "loo-c")]
+    expected = {"loo-a": "known_campaign", "loo-b": "known_campaign",
+        "loo-c": "known_campaign", "loo-new": "new_candidate", "loo-review": "needs_review"}
+    rows = []
+    for incident_id in ids:
+        memory = cluster_incidents(ids, edges, exclude_incident=incident_id)
+        candidate = [edge for edge in edges if incident_id in {edge.source, edge.target}]
+        result = classify(incident_id, candidate, memory,
+            coverage_ok=incident_id != "loo-review", exclude_incident=incident_id)
+        rows.append((incident_id, expected[incident_id], result.outcome))
+    return rows
+
+
 def build_report(labels: Sequence[PairLabel] = (),
                  predictions: Mapping[tuple[str, str], tuple[bool, bool]] | None = None,
-                 loo_rows: Sequence[tuple[str, str, str]] = (),
+                 loo_rows: Sequence[tuple[str, str, str]] | None = None,
                  ablations: Mapping[str, Mapping[tuple[str, str], tuple[bool, bool]]] | None = None) -> dict:
-    pairs = pair_report(labels, predictions or {})
-    loo = loo_report(loo_rows)
+    baseline = predictions or {}
+    pairs = pair_report(labels, baseline)
+    loo = loo_report(synthetic_loo() if loo_rows is None else loo_rows)
     variants = []
-    for name, variant in sorted((ablations or {"all-signals": predictions or {}}).items()):
+    for name, variant in sorted((ablations or {"all-signals": baseline, "without-tier-a": {}}).items()):
         scored = pair_report(labels, variant)["campaign"]
         variants.append({"config": name, "campaign_p": scored["precision"],
             "campaign_r": scored["recall"], "false_merges": scored["fp"],

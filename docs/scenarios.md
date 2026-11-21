@@ -12,7 +12,8 @@ only built-in tuning input. They exercise all three outcomes without claiming
 performance on confidential data.
 
 `build_report` combines campaign/network pair precision, recall and F1; false
-merges; mentor agreement when supplied; leave-one-out routing and its confusion
-matrix; and named ablation results. `GET /api/eval/report` exposes the same
+merges; mentor agreement when supplied; leave-one-out routing that removes each
+synthetic incident and rebuilds memory; and baseline versus reduced-signal
+ablation results. `GET /api/eval/report` exposes the same
 contract shape. An empty local-label input reports zero metrics, not a claimed
 benchmark result.
