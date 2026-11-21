@@ -1,4 +1,5 @@
 // Mock transport for openapi-fetch: answers every contract-v1 endpoint from synthetic fixtures.
+import { CLASSIFY_MAX_UPLOAD_BYTES } from "@/api/client";
 import type { ClassifyResult, Outcome } from "@/api/types";
 import * as db from "./data";
 
@@ -33,6 +34,10 @@ function runSnapshot() {
 async function classify(req: Request): Promise<ClassifyResult> {
   const form = await req.formData();
   const files = form.getAll("files").filter((f): f is File => typeof f !== "string");
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  if (totalBytes > CLASSIFY_MAX_UPLOAD_BYTES) {
+    throw new HttpError(413, "payload_too_large", "Upload exceeds the size limit");
+  }
   const text = form.get("text");
   const url = form.get("url");
   const exclude = form.get("exclude_incident");
