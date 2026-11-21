@@ -69,6 +69,11 @@ class Repository:
             rows = db.execute("SELECT * FROM artifacts WHERE incident_id=? ORDER BY id", (incident_id,))
             return [dict(row) for row in rows]
 
+    def get_artifact(self, artifact_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM artifacts WHERE id=?", (artifact_id,)).fetchone()
+        return dict(row) if row else None
+
     def save_evidence(self, incident_id: str, evidence: Iterable[Evidence]) -> None:
         rows = [(
             incident_id, item.artifact_id, item.type, _scalar(item.family), _scalar(item.tier),
@@ -99,6 +104,10 @@ class Repository:
             row = db.execute("SELECT * FROM media WHERE id=?", (media_id,)).fetchone()
         return dict(row) if row else None
 
+    def list_media(self, artifact_id: str) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM media WHERE artifact_id=? ORDER BY id", (artifact_id,))]
+
     def save_run(self, run_id: str, status: str, started_at: str, *,
                  finished_at: str | None = None, summary: dict[str, Any] | None = None,
                  error: str | None = None) -> None:
@@ -111,3 +120,52 @@ class Repository:
         with self._connection() as db:
             row = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
         return dict(row) if row else None
+
+    def delete_run(self, run_id: str) -> None:
+        with self._connection() as db: db.execute("DELETE FROM runs WHERE id=?", (run_id,))
+
+    def list_decisions(self) -> list[dict[str, Any]]:
+        with self._connection() as db: return [dict(row) for row in db.execute("SELECT * FROM decisions ORDER BY incident_id")]
+
+    def latest_run(self) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 1").fetchone()
+        return dict(row) if row else None
+
+    def list_incidents(self) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM incidents ORDER BY id")]
+
+    def list_evidence(self) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM evidence ORDER BY incident_id,id")]
+
+    def list_edges(self) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM edges ORDER BY id")]
+
+    def list_campaigns(self) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM campaigns ORDER BY id")]
+
+    def list_membership(self) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM membership ORDER BY campaign_id,incident_id")]
+
+    def save_analysis(self, edges: Iterable[Any], campaigns: Iterable[Any],
+                      decisions: Iterable[dict[str, Any]] = ()) -> None:
+        """Replace derived engine state in one transaction."""
+        edge_rows = [(f"edge-{e.source}-{e.target}", e.source, e.target, e.level, e.score,
+                      e.comparable, json.dumps([m.__dict__ for m in e.evidence]), "active") for e in edges]
+        campaign_rows = [(c.id, c.level, c.id, json.dumps({"evidence_types": c.evidence_types,
+            "families": c.families}), None, None) for c in campaigns]
+        members = [(c.id, incident_id, "{}") for c in campaigns for incident_id in c.members]
+        decision_rows = [(d["incident_id"], d["outcome"], d.get("campaign_id"),
+                          json.dumps(d.get("reasons", [])), d["decided_at"]) for d in decisions]
+        with self._connection() as db:
+            for table in ("decisions", "membership", "campaigns", "edges"):
+                db.execute(f"DELETE FROM {table}")
+            db.executemany("INSERT INTO edges VALUES (?,?,?,?,?,?,?,?)", edge_rows)
+            db.executemany("INSERT INTO campaigns VALUES (?,?,?,?,?,?)", campaign_rows)
+            db.executemany("INSERT INTO membership VALUES (?,?,?)", members)
+            db.executemany("INSERT INTO decisions VALUES (?,?,?,?,?)", decision_rows)

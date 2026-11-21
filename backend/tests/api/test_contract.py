@@ -6,6 +6,10 @@ from backend.api.main import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def contract_tests_use_synthetic_mode(monkeypatch): monkeypatch.delenv("SCAMGRAPH_DB", raising=False)
+
+
 def contract_error(response, code, error):
     assert response.status_code == code
     assert response.json()["error"] == error
