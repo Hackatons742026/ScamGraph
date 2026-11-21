@@ -3,6 +3,8 @@ import sqlite3
 import pytest
 
 from backend.db import Repository, init_db
+from backend.engine.linking import LinkEdge
+from backend.engine.memory import Campaign
 from backend.pipeline.models import Artifact, Coverage, Evidence, Incident, MediaRef
 
 
@@ -50,3 +52,14 @@ def test_repository_enforces_foreign_keys(tmp_path):
     missing_parent = Artifact("orphan", "missing", "har", "safe/orphan.har")
     with pytest.raises(sqlite3.IntegrityError):
         repo.save_artifacts([missing_parent])
+
+
+def test_repository_analysis_round_trip(tmp_path):
+    repo = Repository(tmp_path / "test.db")
+    for identifier in ("inc-a", "inc-b"):
+        repo.save_incident(Incident(identifier, "synthetic"))
+    edge = LinkEdge("inc-a", "inc-b", "campaign", "A", (), 1.0, 2, False, ())
+    campaign = Campaign("campaign-inc-a", "campaign", ("inc-a", "inc-b"), (), ())
+    repo.save_analysis([edge], [campaign])
+    assert repo.list_edges()[0]["a_incident"] == "inc-a"
+    assert len(repo.list_membership()) == 2 and repo.list_campaigns()[0]["id"] == campaign.id
