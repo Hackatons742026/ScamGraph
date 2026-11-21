@@ -2,6 +2,7 @@
 // Node env: jsdom's File/FormData can't be serialised by Node's native Request (multipart with files hangs).
 import { describe, expect, it } from "vitest";
 import { api, ApiRequestError, unwrap } from "@/api/client";
+import { mockFetch } from "./handlers";
 
 describe("mock transport covers contract v1", () => {
   it("serves health, runs and import", async () => {
@@ -41,10 +42,13 @@ describe("mock transport covers contract v1", () => {
 
   it("returns contract errors: 404 for unknown ids, 501 for overrides", async () => {
     await expect(unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
-    // The live OpenAPI declares no params/body for the not-yet-enabled override routes (#9), so call the raw URL.
-    const res = await api.POST("/api/edges/{edge_id}/decision", {});
-    expect(res.response.status).toBe(501);
-    expect(res.error).toMatchObject({ error: "not_implemented" });
+    // The live OpenAPI declares no path param or body for the not-yet-enabled override routes (#9), so the typed
+    // client can't build this request: exercise the mock transport directly with a real URL and contract body.
+    const res = await mockFetch(new Request("http://localhost/api/edges/edge_alpha/decision", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision: "confirm", note: "Synthetic note" }),
+    }));
+    expect(res.status).toBe(501);
+    expect(await res.json()).toMatchObject({ error: "not_implemented" });
   });
 
   it("classify returns all three outcomes and validates empty input", async () => {

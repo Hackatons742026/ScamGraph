@@ -14,9 +14,12 @@ from pathlib import Path
 
 if len(sys.argv) != 2:
     sys.exit("usage: seed-synthetic-live-db.py <path/to/new.db>")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if Path(sys.argv[1]).exists():
     sys.exit(f"{sys.argv[1]} already exists; pass a new path")
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+if Path(sys.argv[1]).resolve().is_relative_to(REPO_ROOT):
+    sys.exit("refusing to create a database inside the repository; pass a path outside it (e.g. /tmp/...)")
+sys.path.insert(0, str(REPO_ROOT))
 from backend.api.live import stable_campaign  # noqa: E402
 from backend.db import Repository  # noqa: E402
 from backend.engine.linking import link_incidents  # noqa: E402
@@ -51,6 +54,7 @@ for i, (iid, (kinds, items)) in enumerate(plan.items()):
     repo.save_artifacts([Artifact(art, iid, kinds[0], f"synthetic/{iid}/a.{kinds[0]}", parse_status="ok")])
     repo.save_evidence(iid, [ev(t, tier, fam, h, d, art, 1) for t, tier, fam, h, d in items])
 
+# Analysis: kept in step with backend.api.live.execute_import (link → cluster → leave-one-out classify → save).
 grouped = {row["id"]: [] for row in repo.list_incidents()}
 for row in repo.list_evidence():
     grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"], row["value_hash"], row["display_value"],
@@ -66,10 +70,18 @@ for identifier in grouped:
     decisions.append({"incident_id": identifier, "outcome": result.outcome, "campaign_id": stable_campaign(result, clusters, identifier),
                       "reasons": list(result.reasons), "decided_at": now})
 repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns], decisions)
+# Run summary in the shape execute_import writes (live.run() reads `details` and `artifacts_by_kind`).
+stats: dict[str, dict[str, int]] = {}
+for identifier in grouped:
+    for item in repo.get_artifacts(identifier):
+        value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0})
+        value["total"] += 1
+        value["failed" if item["parse_status"] == "failed" else "parsed"] += 1
 repo.save_run("run-syn-1", "done", now, finished_at=now, summary={
-    "incidents": len(grouped), "artifacts": len(grouped), "unique_artifacts": len(grouped), "duplicates": 0,
-    "artifacts_by_kind": {}, "campaigns": len(clusters.campaigns), "networks": len(clusters.networks),
-    "unassigned": len(clusters.unassigned), "needs_review": sum(d["outcome"] == "needs_review" for d in decisions),
-    "new_candidates": sum(d["outcome"] == "new_candidate" for d in decisions), "secrets_redacted": 0})
+    "incidents": len(grouped), "details": [{"incident_id": i, "artifacts": len(repo.get_artifacts(i))} for i in grouped],
+    "duplicates": 0, "secrets_redacted": 0, "artifacts_by_kind": stats,
+    "campaigns": len(clusters.campaigns), "networks": len(clusters.networks), "unassigned": len(clusters.unassigned),
+    "new_candidates": sum(d["outcome"] == "new_candidate" for d in decisions),
+    "needs_review": sum(d["outcome"] == "needs_review" for d in decisions)})
 print("edges", [(e.source, e.target, e.level, e.tier) for e in edges])
 print("campaigns", [(c.id, c.members) for c in clusters.campaigns], "networks", [(n.id, n.members) for n in clusters.networks])

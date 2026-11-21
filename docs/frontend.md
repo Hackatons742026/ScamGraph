@@ -17,8 +17,9 @@ npm run dev                       # live: proxies /api → http://localhost:8000
 | `npm run lint` | ESLint (TS, React hooks, fast refresh) |
 | `npm run test -- --run` | Vitest + Testing Library, once |
 | `npm run build` | `tsc -b` type check + production build to `frontend/dist` (served by FastAPI for the demo) |
-| `npm run gen:api` | Regenerate `src/api/schema.d.ts` from `openapi.snapshot.yaml` |
-| `npm run gen:api:live` | Regenerate from the running backend's `http://localhost:8000/openapi.json` |
+| `npm run gen:api` | Regenerate `src/api/schema.d.ts` from `openapi.snapshot.json` |
+| `npm run gen:api:live` | Fetch the running backend's `/openapi.json` into `openapi.snapshot.json`, then regenerate |
+| `npm run smoke:live` | Check every screen's GET endpoint on a running backend against the snapshot (see Live mode) |
 
 ## Mock mode (demo fallback)
 
@@ -33,9 +34,31 @@ The fixtures are typed TypeScript instead of JSON, so `tsc` fails as soon as the
 ## API types
 
 - Source of truth: `/generated/api-contract.md` (owner `codex-backend`).
-- `openapi.snapshot.yaml` mirrors contract v1 until the backend serves `/openapi.json`. After that, use `npm run gen:api:live`.
+- `openapi.snapshot.json` is the backend's exported `/openapi.json`. It's committed so builds and CI don't need a running backend.
+  After a backend API change, run `npm run gen:api:live` and commit both the snapshot and `schema.d.ts`.
+- Path parameters use the backend's names (`{incident_id}`, `{run_id}`, …). The URLs match the contract.
 - Never hand-write a contract type. Import aliases from `src/api/types.ts`; they are generated types.
 - Errors use `{error, detail}`. `unwrap()` turns them into `ApiRequestError`, and `QueryState` renders them.
+
+## Live mode
+
+Without `VITE_USE_MOCKS`, the app calls the real API. FastAPI serves the production build same-origin:
+
+```bash
+cd frontend && npm run build && cd ..
+SCAMGRAPH_DB=/path/outside/repo/scamgraph.db uvicorn backend.api.main:app --port 8000   # → http://localhost:8000
+cd frontend && npm run smoke:live
+```
+
+`smoke:live` validates each endpoint against `openapi.snapshot.json` and fails if the snapshot no longer equals
+the live `/openapi.json`. It also checks that the built app is served on `/graph`. It prints warnings for data that
+would make a demo hard to read (identical labels, links without evidence…). It never prints values.
+
+To try live mode without the dataset, create a synthetic database. The backend's own engine links and clusters it:
+
+```bash
+SCAMGRAPH_SALT=synthetic-dev-salt python frontend/scripts/seed-synthetic-live-db.py /tmp/scamgraph-synthetic.db
+```
 
 ## Structure
 
