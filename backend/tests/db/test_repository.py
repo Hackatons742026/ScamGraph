@@ -61,5 +61,5 @@ def test_repository_analysis_round_trip(tmp_path):
     edge = LinkEdge("inc-a", "inc-b", "campaign", "A", (), 1.0, 2, False, ())
     campaign = Campaign("campaign-inc-a", "campaign", ("inc-a", "inc-b"), (), ())
     repo.save_analysis([edge], [campaign])
-    assert repo.list_edges()[0]["a_incident"] == "inc-a"
-    assert len(repo.list_membership()) == 2 and repo.list_campaigns()[0]["id"] == campaign.id
+    assert repo.list_edges()[0]["a_incident"] == "inc-a" and len(repo.list_membership()) == 2
+    assert repo.list_campaigns()[0]["id"] == campaign.id
