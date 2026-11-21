@@ -1,6 +1,6 @@
 // Single source for user-facing domain labels and colours (UI language: English).
 // Colours are hex so Cytoscape (fe-4) can use the same values as the badges.
-import type { Family, IncidentStatus, Outcome, Tier } from "@/api/types";
+import type { Family, IncidentStatus, Outcome, RunStatus, Tier } from "@/api/types";
 
 export const TIER: Record<Tier, { label: string; hint: string; color: string }> = {
   A: { label: "Tier A", hint: "Unique identifier: links incidents on its own", color: "#b91c1c" },
@@ -27,6 +27,13 @@ export const STATUS: Record<IncidentStatus, string> = {
   unassigned: "Unassigned",
   needs_review: "Needs Review",
   new_candidate: "New Candidate",
+};
+
+export const RUN_STATUS: Record<RunStatus, string> = {
+  pending: "Pending",
+  running: "Running",
+  done: "Done",
+  failed: "Failed",
 };
 
 const IGNORE_REASON: Record<string, string> = {
