@@ -3,3 +3,7 @@ uvicorn>=0.30,<1
 pydantic>=2.9,<3
 httpx>=0.27,<1
 pytest>=8,<10
+# ingest OCR / perceptual hash (tesseract binary still system-installed)
+Pillow>=10,<12
+pytesseract>=0.3.10,<1
+ImageHash>=4.3,<5

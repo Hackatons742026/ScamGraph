@@ -46,6 +46,29 @@ def tesseract_available() -> bool:
     return shutil.which("tesseract") is not None
 
 
+def pillow_available() -> bool:
+    try:
+        import PIL  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def pytesseract_available() -> bool:
+    try:
+        import pytesseract  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def ocr_stack_available() -> bool:
+    """True when Tesseract binary + Pillow + pytesseract are all usable."""
+    return tesseract_available() and pillow_available() and pytesseract_available()
+
+
 def _preprocess(path: Path):
     """Greyscale + 2× upscale. Returns a PIL Image or None."""
     try:
