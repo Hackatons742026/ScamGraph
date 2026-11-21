@@ -1,7 +1,8 @@
 // Mock transport for openapi-fetch: answers every contract-v1 endpoint from synthetic fixtures.
 import { CLASSIFY_MAX_UPLOAD_BYTES } from "@/api/client";
-import type { ClassifyResult, Outcome } from "@/api/types";
+import type { CampaignDetail, CampaignSummary, ClassifyResult, EdgeDecisionRequest, MergeRequest, Outcome, SplitRequest } from "@/api/types";
 import * as db from "./data";
+import { MOCK_CAMPAIGN_FAIL_ID, MOCK_EDGE_FAIL_ID } from "./sentinels";
 
 type Handler = (match: string[], url: URL, req: Request) => unknown | Promise<unknown>;
 
@@ -14,13 +15,147 @@ const orNotFound = <T>(value: T | undefined, what: string): T => {
   return value;
 };
 const csv = (url: URL, key: string) => url.searchParams.get(key)?.split(",").filter(Boolean) ?? [];
+const notImplemented = () => new HttpError(501, "not_implemented", "Analyst overrides are enabled after core freeze.");
+const RECORDED_AT = "2026-11-21T22:00:00Z";
+
+async function readJson<T>(req: Request): Promise<T> {
+  return (await req.json()) as T;
+}
+
+function toSummary(detail: CampaignDetail): CampaignSummary {
+  return {
+    id: detail.id,
+    label: detail.label,
+    level: detail.level,
+    size: detail.size,
+    incident_ids: [...detail.incident_ids],
+    first_seen: detail.first_seen,
+    last_seen: detail.last_seen,
+    strongest_evidence: detail.strongest_evidence,
+    network_id: detail.network_id,
+  };
+}
+
+function assignIncidents(campaignId: string, label: string, incidentIds: string[]) {
+  for (const id of incidentIds) {
+    const row = db.incidents.find((i) => i.id === id);
+    if (!row) continue;
+    row.campaign_id = campaignId;
+    row.campaign_label = label;
+    row.status = "in_campaign";
+    row.outcome = "known_campaign";
+  }
+}
+
+function upsertGraphCampaign(id: string, label: string, parent: string | null) {
+  const existing = db.graph.nodes.find((n) => n.id === id);
+  if (existing) {
+    existing.label = label;
+    existing.parent = parent;
+    existing.kind = "campaign";
+    return;
+  }
+  db.graph.nodes.push({ id, kind: "campaign", label, parent, outcome: null, coverage_level: null });
+}
+
+function retargetIncidentParents(incidentIds: string[], parent: string) {
+  for (const n of db.graph.nodes) {
+    if (n.kind === "incident" && incidentIds.includes(n.id)) n.parent = parent;
+  }
+}
+
+/** Happy-path merge: union members, persist into db.campaigns + graph so refetch shows the change. */
+function mockMerge(body: MergeRequest): CampaignDetail {
+  if (body.campaign_ids.includes(MOCK_CAMPAIGN_FAIL_ID)) throw notImplemented();
+  if (body.campaign_ids.length < 2) throw new HttpError(422, "validation_error", "At least two campaign_ids are required.");
+  const parts = body.campaign_ids.map((id) => orNotFound(db.campaignDetail(id), "Campaign"));
+  if (parts.some((p) => p.level !== "campaign")) throw new HttpError(422, "validation_error", "Only campaign-level groups can be merged.");
+  const incidentIds = [...new Set(parts.flatMap((p) => p.incident_ids))];
+  const base = parts[0]!;
+  const merged: CampaignDetail = {
+    ...base,
+    id: "camp_merged_synthetic",
+    label: `Merged (${parts.map((p) => p.label).join(" + ")})`,
+    size: incidentIds.length,
+    incident_ids: incidentIds,
+    members: db.incidents.filter((i) => incidentIds.includes(i.id)),
+    edges: db.edges.filter((e) => incidentIds.includes(e.source) && incidentIds.includes(e.target)),
+    timeline: incidentIds.map((iid, n) => ({ date: `2026-11-0${(n % 9) + 1}T10:00:00Z`, incident_id: iid, event: "merged" })),
+  };
+  const remove = new Set(body.campaign_ids);
+  for (let i = db.campaigns.length - 1; i >= 0; i -= 1) {
+    if (remove.has(db.campaigns[i]!.id)) db.campaigns.splice(i, 1);
+  }
+  db.campaigns.push(toSummary(merged));
+  assignIncidents(merged.id, merged.label, incidentIds);
+  for (let i = db.graph.nodes.length - 1; i >= 0; i -= 1) {
+    if (remove.has(db.graph.nodes[i]!.id)) db.graph.nodes.splice(i, 1);
+  }
+  upsertGraphCampaign(merged.id, merged.label, merged.network_id);
+  retargetIncidentParents(incidentIds, merged.id);
+  return merged;
+}
+
+/** Happy-path split: persist remaining + new campaign into db.campaigns + graph. */
+function mockSplit(body: SplitRequest): CampaignDetail[] {
+  if (body.campaign_id === MOCK_CAMPAIGN_FAIL_ID) throw notImplemented();
+  const detail = orNotFound(db.campaignDetail(body.campaign_id), "Campaign");
+  if (detail.level !== "campaign") throw new HttpError(422, "validation_error", "Only campaign-level groups can be split.");
+  if (!body.incident_ids.length) throw new HttpError(422, "validation_error", "incident_ids must not be empty.");
+  const move = new Set(body.incident_ids);
+  if ([...move].some((id) => !detail.incident_ids.includes(id))) throw new HttpError(422, "validation_error", "incident_ids must be members of the campaign.");
+  if (move.size >= detail.incident_ids.length) throw new HttpError(422, "validation_error", "Cannot move all members out of a campaign.");
+  const remainingIds = detail.incident_ids.filter((id) => !move.has(id));
+  const movedIds = detail.incident_ids.filter((id) => move.has(id));
+  const remaining: CampaignDetail = {
+    ...detail,
+    size: remainingIds.length,
+    incident_ids: remainingIds,
+    members: detail.members.filter((m) => remainingIds.includes(m.id)),
+    edges: detail.edges.filter((e) => remainingIds.includes(e.source) && remainingIds.includes(e.target)),
+    timeline: remainingIds.map((iid, n) => ({ date: `2026-11-0${(n % 9) + 1}T10:00:00Z`, incident_id: iid, event: "retained" })),
+  };
+  const created: CampaignDetail = {
+    ...detail,
+    id: "camp_split_synthetic",
+    label: `${detail.label} (split)`,
+    size: movedIds.length,
+    incident_ids: movedIds,
+    members: detail.members.filter((m) => movedIds.includes(m.id)),
+    edges: detail.edges.filter((e) => movedIds.includes(e.source) && movedIds.includes(e.target)),
+    timeline: movedIds.map((iid, n) => ({ date: `2026-11-0${(n % 9) + 1}T10:00:00Z`, incident_id: iid, event: "split out" })),
+  };
+  const idx = db.campaigns.findIndex((c) => c.id === body.campaign_id);
+  if (idx >= 0) db.campaigns[idx] = toSummary(remaining);
+  else db.campaigns.push(toSummary(remaining));
+  db.campaigns.push(toSummary(created));
+  assignIncidents(remaining.id, remaining.label, remainingIds);
+  assignIncidents(created.id, created.label, movedIds);
+  upsertGraphCampaign(remaining.id, remaining.label, remaining.network_id);
+  upsertGraphCampaign(created.id, created.label, created.network_id);
+  retargetIncidentParents(remainingIds, remaining.id);
+  retargetIncidentParents(movedIds, created.id);
+  return [remaining, created];
+}
+
+async function mockEdgeDecision(edgeId: string, req: Request) {
+  if (edgeId === MOCK_EDGE_FAIL_ID) throw notImplemented();
+  const known = db.edges.some((e) => e.id === edgeId) || edgeId.startsWith("edge_");
+  if (!known && edgeId !== "edge_demo") throw notFound("Edge");
+  const body = await readJson<EdgeDecisionRequest>(req);
+  if (body.decision !== "confirm" && body.decision !== "reject") {
+    throw new HttpError(422, "validation_error", "decision must be confirm or reject.");
+  }
+  return { edge_id: edgeId, decision: body.decision, recorded_at: RECORDED_AT };
+}
 
 /** After POST /api/import, the next few GET /api/runs/{id} responses look "running" so the Overview progress UI can be exercised. */
 let importPollsLeft = 0;
 
-/** Clears in-memory mock run progress between tests. */
+/** Clears in-memory mock run progress and restore mutable fixtures between tests. */
 export function resetMockState() {
   importPollsLeft = 0;
+  db.resetMutableFixtures();
 }
 
 function runSnapshot() {
@@ -102,7 +237,8 @@ const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus
   ["GET", /^\/api\/incidents\/([^/]+)$/, ([id]) => orNotFound(db.incidentDetail(id!), "Incident")],
   ["GET", /^\/api\/artifacts\/([^/]+)$/, ([id]) => orNotFound(db.artifactDetail(id!), "Artifact")],
   ["GET", /^\/api\/campaigns$/, () => db.campaigns],
-  ["POST", /^\/api\/campaigns\/(merge|split)$/, () => { throw new HttpError(501, "not_implemented", "Analyst overrides are enabled after core freeze."); }],
+  ["POST", /^\/api\/campaigns\/merge$/, async (_m, _u, req) => mockMerge(await readJson<MergeRequest>(req))],
+  ["POST", /^\/api\/campaigns\/split$/, async (_m, _u, req) => mockSplit(await readJson<SplitRequest>(req))],
   ["GET", /^\/api\/campaigns\/([^/]+)\/links$/, ([id]) => (orNotFound(db.campaignDetail(id!), "Campaign"), db.campaignLinks(id!))],
   ["GET", /^\/api\/campaigns\/([^/]+)$/, ([id]) => orNotFound(db.campaignDetail(id!), "Campaign")],
   ["GET", /^\/api\/graph$/, (_, url) => {
@@ -129,7 +265,7 @@ const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus
   ["POST", /^\/api\/classify$/, (_, __, req) => classify(req)],
   ["GET", /^\/api\/eval\/report$/, () => db.evalReport],
   ["GET", /^\/api\/exports\/([A-Za-z0-9_-]{1,128})\.(html|csv|misp\.json)$/, ([id, ext]) => syntheticExport(orNotFound(db.campaignDetail(id!), "Campaign"), ext!)],
-  ["POST", /^\/api\/edges\/([^/]+)\/decision$/, () => { throw new HttpError(501, "not_implemented", "Analyst overrides are enabled after core freeze."); }],
+  ["POST", /^\/api\/edges\/([^/]+)\/decision$/, ([id], _, req) => mockEdgeDecision(id!, req)],
 ];
 
 const json = (status: number, body: unknown) =>

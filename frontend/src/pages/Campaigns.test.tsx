@@ -22,7 +22,7 @@ describe("Campaigns", () => {
     const alpha = campaigns.find((c) => c.level === "campaign")!;
     const row = screen.getByRole("link", { name: alpha.label }).closest("tr")!;
     expect(within(row).getByText(alpha.strongest_evidence!.display)).toBeInTheDocument();
-    expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(new RegExp(`^${alpha.size}$`));
+    expect(within(row).getAllByRole("cell")[3]).toHaveTextContent(new RegExp(`^${alpha.size}$`));
     expect(within(row).getByRole("img", { name: new RegExp(`^Tier ${alpha.strongest_evidence!.tier}`) })).toBeInTheDocument();
   });
 
@@ -48,8 +48,9 @@ describe("Campaigns", () => {
     renderApp("/campaigns");
     await screen.findByRole("table");
     const cells = (label: string) => within(screen.getByRole("link", { name: label }).closest("tr")!).getAllByRole("cell").map((c) => c.textContent);
-    expect(cells(full.label).slice(4, 6)).toEqual(["2026-10-30", "2026-11-02"]);
-    expect(cells("Bare campaign").slice(3, 6)).toEqual(["—", "—", "—"]);
+    // select · name · level · incidents · evidence · first · last · actions · export
+    expect(cells(full.label).slice(5, 7)).toEqual(["2026-10-30", "2026-11-02"]);
+    expect(cells("Bare campaign").slice(4, 7)).toEqual(["—", "—", "—"]);
   });
 
   it("shows empty and error states", async () => {

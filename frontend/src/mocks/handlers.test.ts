@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { api, ApiRequestError, unwrap } from "@/api/client";
 import { mockFetch } from "./handlers";
+import { MOCK_CAMPAIGN_FAIL_ID, MOCK_EDGE_FAIL_ID } from "./sentinels";
 
 describe("mock transport covers contract v1", () => {
   it("serves health, runs and import", async () => {
@@ -56,22 +57,54 @@ describe("mock transport covers contract v1", () => {
     expect((await mockFetch(new Request("http://localhost/api/exports/camp_missing.html"))).status).toBe(404);
   });
 
-  it("returns contract errors: 404 for unknown ids, 501 for overrides", async () => {
+  it("returns contract errors: 404 for unknown ids, 501 for override sentinels", async () => {
     await expect(unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
     await expect(
       unwrap(
         api.POST("/api/edges/{edge_id}/decision", {
-          params: { path: { edge_id: "edge_alpha" } },
+          params: { path: { edge_id: MOCK_EDGE_FAIL_ID } },
           body: { decision: "confirm", note: "Synthetic note" },
         }),
       ),
     ).rejects.toMatchObject({ status: 501, code: "not_implemented" });
     await expect(
-      unwrap(api.POST("/api/campaigns/merge", { body: { campaign_ids: ["camp_a", "camp_b"], note: "Synthetic merge" } })),
+      unwrap(api.POST("/api/campaigns/merge", { body: { campaign_ids: [MOCK_CAMPAIGN_FAIL_ID, "camp_alpha"], note: "Synthetic merge" } })),
     ).rejects.toMatchObject({ status: 501, code: "not_implemented" });
     await expect(
-      unwrap(api.POST("/api/campaigns/split", { body: { campaign_id: "camp_a", incident_ids: ["inc_1"], note: "Synthetic split" } })),
+      unwrap(api.POST("/api/campaigns/split", { body: { campaign_id: MOCK_CAMPAIGN_FAIL_ID, incident_ids: ["inc_alpha_1"], note: "Synthetic split" } })),
     ).rejects.toMatchObject({ status: 501, code: "not_implemented" });
+  });
+
+  it("records an edge decision on the happy path", async () => {
+    const decided = await unwrap(
+      api.POST("/api/edges/{edge_id}/decision", {
+        params: { path: { edge_id: "edge_alpha" } },
+        body: { decision: "confirm", note: "Synthetic note" },
+      }),
+    );
+    expect(decided).toMatchObject({ edge_id: "edge_alpha", decision: "confirm", recorded_at: expect.any(String) });
+  });
+
+  it("merges campaigns and persists the result into GET /api/campaigns", async () => {
+    const merged = await unwrap(api.POST("/api/campaigns/merge", { body: { campaign_ids: ["camp_alpha", "camp_beta"], note: "Synthetic merge" } }));
+    expect(merged.id).toBe("camp_merged_synthetic");
+    expect(merged.size).toBeGreaterThanOrEqual(4);
+    const list = await unwrap(api.GET("/api/campaigns"));
+    expect(list.find((c) => c.id === "camp_merged_synthetic")?.size).toBe(merged.size);
+    expect(list.find((c) => c.id === "camp_alpha")).toBeUndefined();
+    expect(list.find((c) => c.id === "camp_beta")).toBeUndefined();
+  });
+
+  it("splits a campaign and persists membership into GET /api/campaigns", async () => {
+    const [kept, created] = await unwrap(
+      api.POST("/api/campaigns/split", { body: { campaign_id: "camp_alpha", incident_ids: ["inc_alpha_2"], note: "Synthetic split" } }),
+    );
+    expect(kept!.incident_ids).toEqual(["inc_alpha_1"]);
+    expect(created!.id).toBe("camp_split_synthetic");
+    expect(created!.incident_ids).toEqual(["inc_alpha_2"]);
+    const list = await unwrap(api.GET("/api/campaigns"));
+    expect(list.find((c) => c.id === "camp_alpha")?.size).toBe(1);
+    expect(list.find((c) => c.id === "camp_split_synthetic")?.incident_ids).toEqual(["inc_alpha_2"]);
   });
 
   it("classify returns all three outcomes and validates empty input", async () => {

@@ -54,11 +54,13 @@ describe("Campaign exports", () => {
         : real(path as never, init as never)) as never);
     renderApp("/campaigns");
     await screen.findByRole("table");
-    const buttons = within(row(campaign.label)).getAllByRole("button");
+    const exportButtons = ["Evidence pack", "CSV", "MISP"].map((label) =>
+      within(row(campaign.label)).getByRole("button", { name: `Download ${label} for ${campaign.label}` }),
+    );
     const csv = within(row(campaign.label)).getByRole("button", { name: `Download CSV for ${campaign.label}` });
     await userEvent.click(csv);
     await waitFor(() => expect(csv).toHaveAttribute("aria-busy", "true"));
-    for (const b of buttons) {
+    for (const b of exportButtons) {
       expect(b).toHaveAttribute("aria-disabled", "true");
       expect(b).not.toBeDisabled();
     }

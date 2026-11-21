@@ -4,6 +4,7 @@ import type { Edge, GraphNode } from "@/api/types";
 import { TierBadge } from "@/components/domain/badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EdgeDecisionActions } from "@/features/overrides/EdgeDecisionActions";
 import { FAMILY } from "@/lib/domain";
 import { LinkEvidence } from "./LinkEvidence";
 
@@ -52,6 +53,7 @@ export function EdgePanel({ edge, nodes, onClose }: Props) {
         <p className="text-xs text-slate-600">A shared site kit alone means shared tooling: a network link only. Whether these are one campaign is left to the analyst.</p>
       )}
       <LinkEvidence evidence={edge.evidence} />
+      <EdgeDecisionActions edgeId={edge.id} />
     </aside>
   );
 }
