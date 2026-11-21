@@ -4,6 +4,26 @@ ScamGraph is an offline analysis tool that compares suspicious advertising artif
 
 ## Quick start
 
+### Docker demo and checks
+
+For an all-container synthetic demo, including the built frontend and live API:
+
+```bash
+docker compose up --build -d
+```
+
+Open `http://localhost:8000`. To run the complete containerized checks:
+
+```bash
+docker compose --profile test run --rm backend-tests
+docker compose --profile test run --rm frontend-tests
+docker compose --profile test run --rm live-smoke
+```
+
+The Compose stack seeds a synthetic demo database in a named volume. Its default
+salt is for synthetic testing only. See [Docker workflow](docs/docker.md) for
+reset, persistence, and data-import notes.
+
 Use Python 3.11 and a virtual environment. On macOS/Linux, from the repository root:
 
 ```bash
