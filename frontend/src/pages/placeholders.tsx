@@ -1,11 +1,5 @@
 // Route placeholders; each is replaced by its own task (see the task number shown on screen).
-import { useParams } from "react-router";
 import { ComingSoon, PageHeader } from "@/components/layout/PageHeader";
-
-export function IncidentDetail() {
-  const { id } = useParams();
-  return (<><PageHeader title="Incident detail" description={id ? `Incident ${id}` : undefined} /><ComingSoon task="#4" /></>);
-}
 
 export function Campaigns() {
   return (<><PageHeader title="Campaigns" description="Campaigns and networks with their strongest evidence." /><ComingSoon task="#5" /></>);
