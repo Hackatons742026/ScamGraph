@@ -1,0 +1,83 @@
+import { cleanup, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as client from "@/api/client";
+import { ApiRequestError } from "@/api/client";
+import { ignoreReasonLabel, OUTCOME, TIER } from "@/lib/domain";
+import { incidentDetail, incidents } from "@/mocks/data";
+import { renderApp } from "@/test/render";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("Incident detail page", () => {
+  it("renders decision, evidence, coverage and failed artifacts", async () => {
+    const alpha2 = incidents.find((i) => i.id === "inc_alpha_2")!;
+    const detail = incidentDetail(alpha2.id)!;
+    renderApp(`/incidents/${alpha2.id}`);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Incident detail" })).toBeInTheDocument();
+    expect(await screen.findByText(alpha2.label)).toBeInTheDocument();
+
+    // Coverage badges from the summary.
+    expect(screen.getByText("full coverage")).toBeInTheDocument();
+
+    // Decision card for one of the three outcomes (OutcomeBadge also appears in the header).
+    const decisionCard = screen.getByRole("heading", { name: "Decision" }).closest(".rounded-lg") as HTMLElement;
+    expect(within(decisionCard).getByText(OUTCOME[detail.outcome!])).toBeInTheDocument();
+
+    // Evidence shows tier + masked display (never invent raw ids as the primary value).
+    const evidenceCard = screen.getByRole("heading", { name: "Evidence" }).closest(".rounded-lg") as HTMLElement;
+    expect(within(evidenceCard).getAllByRole("img", { name: new RegExp(`^${TIER.A.label}`) }).length).toBeGreaterThan(0);
+    expect(within(evidenceCard).getByText("pixel_****1111")).toBeInTheDocument();
+
+    // Ignored evidence is muted with a reason.
+    expect(within(evidenceCard).getByText(new RegExp(`Ignored: ${ignoreReasonLabel("cdn_ip")}`))).toBeInTheDocument();
+
+    // Failed artifacts call out the reason.
+    expect(screen.getByText(/1 failed artifact/i)).toBeInTheDocument();
+    expect(screen.getByText(/Unrecognised format/i)).toBeInTheDocument();
+  });
+
+  it("loads artifact detail from GET /api/artifacts/{id}", async () => {
+    renderApp("/incidents/inc_alpha_1");
+    expect(await screen.findByText(/Synthetic incident Alpha-1/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /capture\.har/i }));
+    expect(await screen.findByText(/42 requests/i)).toBeInTheDocument();
+    expect(screen.getByText(/Hosts:.*news\.example-scam\.test/)).toBeInTheDocument();
+  });
+
+  it("shows loading then data", async () => {
+    renderApp("/incidents/inc_gamma");
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    expect(await screen.findByText(/Synthetic incident Gamma/)).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Loading" })).not.toBeInTheDocument();
+  });
+
+  it("shows empty state for unknown incident id", async () => {
+    renderApp("/incidents/missing_incident");
+    expect(await screen.findByText(/Incident not found/i)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows error state when the API fails", async () => {
+    vi.spyOn(client, "unwrap").mockRejectedValueOnce(
+      new ApiRequestError(503, { error: "unavailable", detail: "Incident service down" }),
+    );
+    renderApp("/incidents/inc_alpha_1");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Incident service down/);
+  });
+
+  it("renders all three decision outcomes across fixtures", async () => {
+    for (const outcome of ["known_campaign", "new_candidate", "needs_review"] as const) {
+      cleanup();
+      const row = incidents.find((i) => i.outcome === outcome)!;
+      renderApp(`/incidents/${row.id}`);
+      expect(await screen.findByText(row.label)).toBeInTheDocument();
+      const decisionCard = screen.getByRole("heading", { name: "Decision" }).closest(".rounded-lg") as HTMLElement;
+      expect(within(decisionCard).getByText(OUTCOME[outcome])).toBeInTheDocument();
+    }
+  });
+});
