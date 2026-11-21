@@ -30,6 +30,6 @@ Task: #<n>
 ## Data safety (all must be true)
 - [ ] No dataset files (HAR, HTML, MHTML, PNG/JPG, MP4, `*.info.json`) or anything from `data/`
 - [ ] No raw tokens, cookies, `access_token` / `fbclid` / `gclid` / `clickid` values, IBANs, phone numbers or real scam domains, in code, tests, logs or this description
-- [ ] Test fixtures are synthetic only (`example-scam.test`, fake IDs)
+- [ ] Test fixtures are synthetic only (`example-scam.test`, fake IDs) and live only under `backend/tests/fixtures/**` or `frontend/src/test/fixtures/**` (the only paths the CI data-safety check allows)
 - [ ] No hard-coded incident IDs or expected results
 - [ ] Screenshots (if any) use mock data only

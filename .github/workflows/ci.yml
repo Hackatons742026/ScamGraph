@@ -8,7 +8,8 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs only; every push to main keeps its own result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -17,26 +18,39 @@ jobs:
   data-safety:
     name: Data safety
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: No dataset files tracked
+      - name: No dataset files tracked or added
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # Raw NASK artifacts and databases must never be committed.
           # Synthetic fixtures are allowed only in the two fixture directories.
-          bad=$(git ls-files \
-            | grep -E '^data/|\.(har|mhtml|mp4|mov|db|db-journal)$|(^|/)\.har$' \
-            | grep -vE '^(backend/tests/fixtures|frontend/src/test/fixtures)/' || true)
+          # core.quotePath=false keeps non-ASCII (e.g. Polish) file names unescaped so the patterns match.
+          pattern='^data/|\.(har|mhtml|mp4|mov|webm|mkv|db|db-journal|sqlite3?)$|\.info\.json$'
+          allow='^(backend/tests/fixtures|frontend/src/test/fixtures)/'
+          files=$(git -c core.quotePath=false ls-files)
+          if [ -n "$BASE_REF" ]; then
+            # On PRs also check files added in any commit of the branch: deleting later does not erase history.
+            added=$(git -c core.quotePath=false log --name-only --diff-filter=A --format= "origin/$BASE_REF..HEAD")
+            files=$(printf '%s\n%s\n' "$files" "$added")
+          fi
+          bad=$(printf '%s\n' "$files" | grep -iE "$pattern" | grep -vE "$allow" | sort -u || true)
           if [ -n "$bad" ]; then
-            echo "::error::Dataset-like files are tracked (see list below). Remove them from git."
+            echo "::error::Dataset-like files are tracked or were added in this branch (list below). Remove them from git history."
             echo "$bad"
             exit 1
           fi
-          echo "OK: no dataset files tracked."
+          echo "OK: no dataset files tracked or added."
 
   backend:
     name: Backend (pytest)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       # Test-only salt, not a secret. Real salts are set per machine and never committed.
       SCAMGRAPH_SALT: ci-test-salt-not-a-secret
@@ -78,15 +92,16 @@ jobs:
           SCAMGRAPH_DB: ${{ runner.temp }}/scamgraph-ci.db
           SCAMGRAPH_CACHE_DIR: ${{ runner.temp }}/scamgraph-cache
         run: |
+          # Same command developers run locally (see architecture.md).
           if [ ! -d backend/tests ]; then
-            echo "::notice::backend/tests not found, nothing to run."
+            echo "::warning::backend/tests not found, no backend tests ran."
             exit 0
           fi
           set +e
-          python -m pytest backend/tests -q
+          pytest backend/tests -q
           rc=$?
           if [ "$rc" -eq 5 ]; then
-            echo "::notice::pytest collected no tests."
+            echo "::warning::pytest collected no tests."
             exit 0
           fi
           exit "$rc"
@@ -94,6 +109,7 @@ jobs:
   frontend:
     name: Frontend (lint, test, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
