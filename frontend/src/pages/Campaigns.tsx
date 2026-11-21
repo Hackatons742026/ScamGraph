@@ -67,7 +67,9 @@ export function Campaigns() {
                       </td>
                       <td className="px-3 py-2 tabular-nums">{formatDate(c.first_seen)}</td>
                       <td className="px-3 py-2 tabular-nums">{formatDate(c.last_seen)}</td>
-                      <td className="px-3 py-2"><ExportLinks campaignId={c.id} label={c.label} /></td>
+                      <td className="px-3 py-2">
+                        {c.level === "campaign" ? <ExportLinks campaignId={c.id} label={c.label} /> : <span className="text-xs text-slate-400" title="Exports are per campaign; networks are not exported">—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

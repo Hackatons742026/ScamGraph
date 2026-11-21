@@ -65,15 +65,24 @@ async function classify(req: Request): Promise<ClassifyResult> {
   };
 }
 
-/** Mock-mode export file: synthetic content with the backend's content type and attachment filename. */
+/** Stand-in for the backend's salted ref: a stable 16-hex digest, so mock exports never carry internal ids. */
+function maskedRef(kind: string, id: string): string {
+  let h = 0xcbf29ce484222325n;
+  for (const ch of `${kind}:${id}`) h = BigInt.asUintN(64, (h ^ BigInt(ch.codePointAt(0)!)) * 0x100000001b3n);
+  return `${kind}-${h.toString(16).padStart(16, "0")}`;
+}
+
+/** Mock-mode export file: synthetic, masked-style content with the backend's content type and attachment filename. */
 function syntheticExport(campaign: NonNullable<ReturnType<typeof db.campaignDetail>>, ext: string): Response {
-  const members = campaign.members.map((m) => m.id);
+  if (campaign.level !== "campaign") throw notFound("Campaign"); // the backend exports campaign-level groups only
+  const ref = maskedRef("campaign", campaign.id);
+  const rows = campaign.members.map((m) => `incident,${ref},${maskedRef("incident", m.id)}`);
   const body =
-    ext === "csv" ? `campaign_ref,incident_ref\n${members.map((m) => `${campaign.id},${m}`).join("\n")}\n`
-    : ext === "html" ? `<!doctype html><title>Synthetic evidence pack</title><h1>${campaign.label} (synthetic, mock mode)</h1>`
-    : JSON.stringify({ Event: { info: `${campaign.label} (synthetic, mock mode)`, Attribute: [] } });
+    ext === "csv" ? `record_type,campaign_ref,incident_ref\n${rows.join("\n")}\n`
+    : ext === "html" ? `<!doctype html><title>Synthetic evidence pack</title><h1>${ref} (synthetic, mock mode)</h1>`
+    : JSON.stringify({ Event: { info: `${ref} (synthetic, mock mode)`, Attribute: [] } });
   const type = ext === "csv" ? "text/csv; charset=utf-8" : ext === "html" ? "text/html; charset=utf-8" : "application/json";
-  return new Response(body, { headers: { "Content-Type": type, "Content-Disposition": `attachment; filename="scamgraph-${campaign.id}.${ext}"` } });
+  return new Response(body, { headers: { "Content-Type": type, "Content-Disposition": `attachment; filename="scamgraph-${ref}.${ext}"` } });
 }
 
 const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus?: number]> = [
