@@ -25,8 +25,9 @@ describe("downloadExport", () => {
     vi.useFakeTimers({ toFake: ["setTimeout"] });
     const name = await downloadExport(campaign.id, "html");
     expect(names).toEqual([name]);
+    vi.advanceTimersByTime(REVOKE_AFTER_MS - 1);
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(REVOKE_AFTER_MS);
+    vi.advanceTimersByTime(1);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:synthetic");
   });
 

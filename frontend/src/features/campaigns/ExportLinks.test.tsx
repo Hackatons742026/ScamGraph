@@ -43,8 +43,28 @@ describe("Campaign exports", () => {
     const text = await saved.blobs[0]!.text();
     expect(text).toMatch(/^record_type,campaign_ref,incident_ref\n/);
     for (const id of [campaign.id, ...campaignDetail(campaign.id)!.members.map((m) => m.id)]) expect(text).not.toContain(id);
-    expect(csv).toHaveFocus();
-    expect(csv).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("keeps buttons focusable while a download is in flight (aria-disabled, never disabled) and marks the busy one", async () => {
+    let finish!: () => void;
+    const real = api.GET.bind(api);
+    vi.spyOn(api, "GET").mockImplementation(((path: string, init: unknown) =>
+      path === "/api/exports/{name}"
+        ? new Promise((resolve) => { finish = () => resolve({ data: new Blob(["x"]), error: undefined, response: new Response("x") }); })
+        : real(path as never, init as never)) as never);
+    renderApp("/campaigns");
+    await screen.findByRole("table");
+    const buttons = within(row(campaign.label)).getAllByRole("button");
+    const csv = within(row(campaign.label)).getByRole("button", { name: `Download CSV for ${campaign.label}` });
+    await userEvent.click(csv);
+    await waitFor(() => expect(csv).toHaveAttribute("aria-busy", "true"));
+    for (const b of buttons) {
+      expect(b).toHaveAttribute("aria-disabled", "true");
+      expect(b).not.toBeDisabled();
+    }
+    finish();
+    await waitFor(() => expect(csv).toHaveAttribute("aria-busy", "false"));
+    expect(csv).toHaveAttribute("aria-disabled", "false");
   });
 
   it("offers no exports for networks (the backend exports campaigns only)", async () => {
