@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  data-safety:
+    name: Data safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: No dataset files tracked
+        run: |
+          # Raw NASK artifacts and databases must never be committed.
+          # Synthetic fixtures are allowed only in the two fixture directories.
+          bad=$(git ls-files \
+            | grep -E '^data/|\.(har|mhtml|mp4|mov|db|db-journal)$|(^|/)\.har$' \
+            | grep -vE '^(backend/tests/fixtures|frontend/src/test/fixtures)/' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Dataset-like files are tracked (see list below). Remove them from git."
+            echo "$bad"
+            exit 1
+          fi
+          echo "OK: no dataset files tracked."
+
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    env:
+      # Test-only salt, not a secret. Real salts are set per machine and never committed.
+      SCAMGRAPH_SALT: ci-test-salt-not-a-secret
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect backend
+        id: detect
+        run: |
+          if [ -f backend/requirements.txt ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::backend/requirements.txt not found, skipping backend checks."
+          fi
+
+      - name: Set up Python 3.11
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install system tools (ffmpeg, Tesseract + Polish)
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-pol
+
+      - name: Install Python dependencies
+        if: steps.detect.outputs.present == 'true'
+        # Heavy optional deps (backend/requirements-optional.txt) are intentionally not installed in CI.
+        run: pip install -r backend/requirements.txt
+
+      - name: Run pytest
+        if: steps.detect.outputs.present == 'true'
+        env:
+          SCAMGRAPH_DB: ${{ runner.temp }}/scamgraph-ci.db
+          SCAMGRAPH_CACHE_DIR: ${{ runner.temp }}/scamgraph-cache
+        run: |
+          if [ ! -d backend/tests ]; then
+            echo "::notice::backend/tests not found, nothing to run."
+            exit 0
+          fi
+          set +e
+          python -m pytest backend/tests -q
+          rc=$?
+          if [ "$rc" -eq 5 ]; then
+            echo "::notice::pytest collected no tests."
+            exit 0
+          fi
+          exit "$rc"
+
+  frontend:
+    name: Frontend (lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect frontend
+        id: detect
+        working-directory: .
+        run: |
+          if [ -f frontend/package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::frontend/package-lock.json not found, skipping frontend checks."
+          fi
+
+      - name: Set up Node
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        if: steps.detect.outputs.present == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.detect.outputs.present == 'true'
+        run: npm run lint
+
+      - name: Test
+        if: steps.detect.outputs.present == 'true'
+        run: npm run test -- --run
+
+      - name: Build
+        if: steps.detect.outputs.present == 'true'
+        run: npm run build
