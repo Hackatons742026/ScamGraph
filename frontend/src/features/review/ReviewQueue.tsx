@@ -31,7 +31,8 @@ export function ReviewQueue({ incidents }: { incidents: IncidentSummary[] }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={incident.status} />
-              <OutcomeBadge outcome={incident.outcome} />
+              {/* Status and outcome share values (needs_review, new_candidate): show the outcome only when it adds something. */}
+              {incident.outcome !== incident.status && <OutcomeBadge outcome={incident.outcome} />}
               <CoverageBadges coverage={incident.coverage} />
             </div>
           </div>
