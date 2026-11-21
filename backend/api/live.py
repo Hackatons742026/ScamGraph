@@ -10,8 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.db import Repository
-from backend.pipeline.run import run_on_data_dir
-from backend.pipeline.run import process_input
+from backend.pipeline.run import process_input, run_on_data_dir
 from backend.pipeline.models import Evidence
 from backend.engine.linking import link_incidents
 from backend.engine.memory import classify, cluster_incidents
@@ -21,7 +20,6 @@ from .schemas import *  # noqa: F403
 def repository() -> Repository | None:
     path = os.environ.get("SCAMGRAPH_DB")
     return Repository(path) if path else None
-
 def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     started = datetime.now(timezone.utc).isoformat()
     try:
@@ -36,10 +34,13 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
         edges = link_incidents(grouped)
         clusters = cluster_incidents(grouped, edges)
         now = datetime.now(timezone.utc).isoformat()
-        decisions = [{"incident_id": identifier,
-            "outcome": "known_campaign" if identifier in clusters.campaign_by_incident else "new_candidate",
-            "campaign_id": clusters.campaign_by_incident.get(identifier), "reasons": [], "decided_at": now}
-            for identifier in grouped]
+        decisions = []
+        for identifier in grouped:
+            memory = cluster_incidents(grouped, edges, exclude_incident=identifier)
+            result = classify(identifier, [e for e in edges if identifier in {e.source, e.target}],
+                memory, coverage_ok=bool(grouped[identifier]), exclude_incident=identifier)
+            decisions.append({"incident_id": identifier, "outcome": result.outcome,
+                "campaign_id": result.campaign_id, "reasons": list(result.reasons), "decided_at": now})
         repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns], decisions)
         stats: dict[str, dict[str, int]] = {}
         for identifier in grouped:
@@ -52,7 +53,6 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
         repo.save_run(run_id, "done", started, finished_at=datetime.now(timezone.utc).isoformat(), summary=summary)
     except Exception as exc:  # background job boundary
         repo.save_run(run_id, "failed", started, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc)[:500])
-
 def coverage(raw: str) -> Coverage:
     value = json.loads(raw or "{}")
     kinds = value.get("kinds_present", [])
@@ -62,7 +62,6 @@ def coverage(raw: str) -> Coverage:
         has_image="image" in kinds, has_video="video" in kinds,
         has_adlib="adlib_json" in kinds, has_text="text" in kinds,
         level="low" if badges else "ok", badges=badges)
-
 def run(row: dict) -> RunSummary:
     summary = json.loads(row["summary_json"] or "{}")
     artifacts = sum(item.get("artifacts", 0) for item in summary.get("details", []))
@@ -73,8 +72,7 @@ def run(row: dict) -> RunSummary:
         campaigns=summary.get("campaigns", 0), networks=summary.get("networks", 0),
         unassigned=summary.get("unassigned", 0), needs_review=summary.get("needs_review", 0),
         new_candidates=summary.get("new_candidates", 0),
-        secrets_redacted=summary.get("secrets_redacted", 0), error=row["error"])
-
+        secrets_redacted=summary.get("secrets_redacted", 0), error="Import failed" if row["error"] else None)
 def incident(repo: Repository, row: dict) -> IncidentSummary:
     campaign_ids = {item["id"] for item in repo.list_campaigns() if item["level"] == "campaign"}
     memberships = {item["incident_id"]: item["campaign_id"] for item in repo.list_membership()
@@ -88,13 +86,11 @@ def incident(repo: Repository, row: dict) -> IncidentSummary:
         first_seen=row["first_seen"], last_seen=row["last_seen"], artifact_count=len(artifacts),
         coverage=coverage(row["coverage_json"]), status=status, campaign_id=campaign_id,
         campaign_label=campaign_id, network_id=None, outcome=outcome)
-
 def evidence(row: dict) -> EvidenceItem:
     return EvidenceItem(id=f"evidence-{row['id']}", type=row["type"], tier=row["tier"],
         family=row["family"], display=row["display_value"], weight=row["weight"],
         artifact_id=row["artifact_id"] or "", funnel_step=row["funnel_step"],
         ignored=bool(row["ignored"]), ignore_reason=row["ignore_reason"])
-
 def artifact(row: dict) -> ArtifactSummary:
     observations = 1
     if row["error"] and "observations=" in row["error"]:
@@ -102,9 +98,8 @@ def artifact(row: dict) -> ArtifactSummary:
     return ArtifactSummary(id=row["id"], kind=row["kind"],
         name_display=f"Artifact.{row['kind']}", funnel_step=row["funnel_step"],
         role=row["role"] or "unknown", parse_status=row["parse_status"] or "partial",
-        error=row["error"], captured_at=row["captured_at"], duplicate_of=None,
+        error="Parse failed" if row["error"] else None, captured_at=row["captured_at"], duplicate_of=None,
         observations=observations)
-
 def edge(row: dict) -> Edge:
     raw = json.loads(row["evidence_json"] or "[]")
     tiers = [item.get("tier", "C") for item in raw]
@@ -113,13 +108,11 @@ def edge(row: dict) -> Edge:
     return Edge(id=row["id"], source=row["a_incident"], target=row["b_incident"],
         level=row["level"], tier=tier, families=families, score=row["score"],
         comparable=row["comparable"], low_confidence=row["comparable"] < 2, evidence=[])
-
 def campaign(repo: Repository, row: dict) -> CampaignSummary:
     members = [m["incident_id"] for m in repo.list_membership() if m["campaign_id"] == row["id"]]
     return CampaignSummary(id=row["id"], label=row["label"], level=row["level"], size=len(members),
         incident_ids=members, first_seen=row["first_seen"], last_seen=row["last_seen"],
         strongest_evidence=None, network_id=None)
-
 def safe_media_path(row: dict) -> Path:
     path = Path(row.get("path") or "").resolve()
     roots = [Path(value).resolve() for key in ("SCAMGRAPH_DATA_DIR", "SCAMGRAPH_CACHE_DIR")
@@ -127,7 +120,6 @@ def safe_media_path(row: dict) -> Path:
     if not path.is_file() or not any(path.is_relative_to(root) for root in roots):
         raise FileNotFoundError
     return path
-
 def classify_multipart(repo: Repository, body: bytes, content_type: str,
                        exclude: str | None = None) -> tuple[object, object, list]:
     if len(body) > 10_000_000: raise OverflowError
