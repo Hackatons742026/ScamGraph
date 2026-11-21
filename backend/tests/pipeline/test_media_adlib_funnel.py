@@ -11,7 +11,7 @@ from backend.pipeline.intake.funnel import assign_funnel_roles
 from backend.pipeline.intake.html import parse_html
 from backend.pipeline.intake.image import parse_image
 from backend.pipeline.models import Artifact, ArtifactKind, ParseStatus
-from backend.pipeline.ocr import ocr_image, tesseract_available
+from backend.pipeline.ocr import ocr_image, ocr_stack_available
 from backend.pipeline.redact import hash_secret
 from backend.pipeline.video import extract_keyframes, ffmpeg_available
 from backend.tests.fixtures.synthetic_media import write_adlib, write_png
@@ -43,11 +43,16 @@ def test_image_parse_hashes_and_caches(tmp_path: Path) -> None:
     assert cached.is_file()
 
 
-@pytest.mark.skipif(not tesseract_available(), reason="tesseract not installed")
+@pytest.mark.skipif(
+    not ocr_stack_available(),
+    reason="tesseract + Pillow + pytesseract not all available",
+)
 def test_ocr_runs_when_tesseract_present(tmp_path: Path) -> None:
     path = write_png(tmp_path / "ocr.png")
     result = ocr_image(path)
+    # Blank synthetic image may yield empty text; engine must still be selected.
     assert result.engine == "tesseract"
+    assert result.error is None or "pol failed" in (result.error or "")
 
 
 def test_ocr_soft_fails_without_engine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

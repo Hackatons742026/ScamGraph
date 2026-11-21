@@ -46,6 +46,29 @@ def tesseract_available() -> bool:
     return shutil.which("tesseract") is not None
 
 
+def pillow_available() -> bool:
+    try:
+        import PIL  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def pytesseract_available() -> bool:
+    try:
+        import pytesseract  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def ocr_stack_available() -> bool:
+    """True when Tesseract binary + Pillow + pytesseract are all usable."""
+    return tesseract_available() and pillow_available() and pytesseract_available()
+
+
 def _preprocess(path: Path):
     """Greyscale + 2× upscale. Returns a PIL Image or None."""
     try:
@@ -54,11 +77,11 @@ def _preprocess(path: Path):
         logger.info("Pillow not installed; OCR preprocess skipped")
         return None
     try:
-        img = Image.open(path)
-        img = ImageOps.grayscale(img)
+        with Image.open(path) as opened:
+            img = ImageOps.grayscale(opened.convert("RGB"))
         w, h = img.size
         if w > 0 and h > 0:
-            img = img.resize((w * 2, h * 2))
+            img = img.resize((max(w * 2, 1), max(h * 2, 1)))
         return img
     except Exception as exc:  # noqa: BLE001
         logger.info("OCR preprocess failed: %s", exc)
