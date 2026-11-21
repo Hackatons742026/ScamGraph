@@ -1,3 +1,5 @@
+import pytest
+
 from backend.eval.harness import PairLabel, build_report, loo_report, scenarios, synthetic_variants
 
 
@@ -25,3 +27,8 @@ def test_report_false_merges_and_ablation():
         {"all-signals": {("a", "b"): (True, True)}, "no-tier-a": {}})
     assert report["false_merges"] == 1
     assert [row["config"] for row in report["ablation"]] == ["all-signals", "no-tier-a"]
+
+
+def test_loo_rejects_unknown_outcomes():
+    with pytest.raises(ValueError, match="unknown routing outcome"):
+        loo_report([("synthetic", "known_campaign", "unknown")])

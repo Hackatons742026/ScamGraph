@@ -74,8 +74,11 @@ def confusion(expected: Sequence[str], predicted: Sequence[str]) -> dict[str, ob
 
 def pair_report(labels: Sequence[PairLabel], predictions: Mapping[tuple[str, str], tuple[bool, bool]]) -> dict:
     predicted = [predictions.get(tuple(sorted((row.left_id, row.right_id))), (False, False)) for row in labels]
-    mentor = [(row.campaign, row.mentor_campaign) for row in labels if row.mentor_campaign is not None]
-    return {"n_pairs": len(labels), "mentor_verified": len(mentor),
+    mentor = [(actual, reviewed) for row in labels
+              for actual, reviewed in ((row.campaign, row.mentor_campaign), (row.network, row.mentor_network))
+              if reviewed is not None]
+    verified = sum(row.mentor_campaign is not None or row.mentor_network is not None for row in labels)
+    return {"n_pairs": len(labels), "mentor_verified": verified,
         "agreement": sum(a == b for a, b in mentor) / len(mentor) if mentor else None,
         "campaign": metric((row.campaign for row in labels), (row[0] for row in predicted)),
         "network": metric((row.network for row in labels), (row[1] for row in predicted))}
