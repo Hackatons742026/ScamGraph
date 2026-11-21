@@ -58,13 +58,20 @@ describe("mock transport covers contract v1", () => {
 
   it("returns contract errors: 404 for unknown ids, 501 for overrides", async () => {
     await expect(unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
-    // The live OpenAPI declares no path param or body for the not-yet-enabled override routes (#9), so the typed
-    // client can't build this request: exercise the mock transport directly with a real URL and contract body.
-    const res = await mockFetch(new Request("http://localhost/api/edges/edge_alpha/decision", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision: "confirm", note: "Synthetic note" }),
-    }));
-    expect(res.status).toBe(501);
-    expect(await res.json()).toMatchObject({ error: "not_implemented" });
+    await expect(
+      unwrap(
+        api.POST("/api/edges/{edge_id}/decision", {
+          params: { path: { edge_id: "edge_alpha" } },
+          body: { decision: "confirm", note: "Synthetic note" },
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 501, code: "not_implemented" });
+    await expect(
+      unwrap(api.POST("/api/campaigns/merge", { body: { campaign_ids: ["camp_a", "camp_b"], note: "Synthetic merge" } })),
+    ).rejects.toMatchObject({ status: 501, code: "not_implemented" });
+    await expect(
+      unwrap(api.POST("/api/campaigns/split", { body: { campaign_id: "camp_a", incident_ids: ["inc_1"], note: "Synthetic split" } })),
+    ).rejects.toMatchObject({ status: 501, code: "not_implemented" });
   });
 
   it("classify returns all three outcomes and validates empty input", async () => {
