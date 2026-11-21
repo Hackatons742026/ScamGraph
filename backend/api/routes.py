@@ -1,5 +1,7 @@
 """Contract-v1 endpoints backed by synthetic seed objects."""
 
+import re
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from . import seed
@@ -58,6 +60,8 @@ def campaign_links(campaign_id: str) -> list[CampaignLink]:
 @router.get("/graph", response_model=GraphResponse)
 def graph(campaign: str | None = None, tiers: str | None = None,
           levels: str | None = None) -> GraphResponse:
+    if campaign and campaign != seed.CAMPAIGN.id:
+        return GraphResponse(nodes=[], edges=[])
     node = GraphNode(id=seed.INCIDENT.id, kind="incident", label=seed.INCIDENT.label,
                      parent=seed.CAMPAIGN.id, outcome=seed.INCIDENT.outcome, coverage_level="ok")
     edge = seed.EDGE
@@ -72,8 +76,8 @@ MULTIPART = {"requestBody": {"content": {"multipart/form-data": {"schema": {
 async def classify(_request: Request) -> ClassifyResult:
     body = await _request.body()
     content_type = _request.headers.get("content-type", "")
-    fields = (b'name="files"', b'name="text"', b'name="url"')
-    if not content_type.startswith("multipart/form-data") or not any(field in body for field in fields):
+    values = re.findall(rb'name="(?:files|text|url)"[^\r\n]*\r\n(?:[^\r\n]*\r\n)*\r\n(.*?)(?=\r\n--)', body, re.DOTALL)
+    if not content_type.startswith("multipart/form-data") or not any(value.strip() for value in values):
         raise HTTPException(422, "At least one file, text, or URL is required")
     reason = Reason(kind="match", text="Synthetic tier-A campaign match.", evidence=[seed.EVIDENCE])
     return ClassifyResult(outcome="known_campaign", campaign_id=seed.CAMPAIGN.id,

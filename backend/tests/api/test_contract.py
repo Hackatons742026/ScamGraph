@@ -29,6 +29,7 @@ def test_filters_route_ordering_and_report_shape():
     assert len(client.get("/api/incidents?status=in_campaign,unassigned&campaign=camp_demo").json()) == 1
     assert client.get("/api/incidents?status=needs_review").json() == []
     assert client.get("/api/graph?tiers=B&levels=network").json()["edges"] == []
+    assert client.get("/api/graph?campaign=missing").json() == {"nodes": [], "edges": []}
     report = client.get("/api/eval/report").json()
     assert set(report) == {"generated_at", "scenarios", "pairs", "false_merges", "loo", "ablation"}
     assert set(report["pairs"]) == {"n_pairs", "mentor_verified", "agreement", "campaign", "network"}
@@ -41,6 +42,8 @@ def test_mutations_media_and_contract_errors():
     media = client.get("/api/media/media_demo")
     assert media.headers["content-type"] == "image/png" and media.content.startswith(b"\x89PNG")
     contract_error(client.post("/api/classify"), 422, "validation_error")
+    for files in ({"text": (None, "")}, {"url": (None, "")}, {"files": ("empty.txt", b"")}):
+        contract_error(client.post("/api/classify", files=files), 422, "validation_error")
     contract_error(client.post("/api/import", json={"path": 42}), 422, "validation_error")
     for path in ("/api/runs/missing", "/api/incidents/missing", "/api/artifacts/missing",
                  "/api/campaigns/missing", "/api/media/missing"):
