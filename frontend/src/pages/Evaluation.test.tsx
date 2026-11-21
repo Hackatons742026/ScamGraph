@@ -92,6 +92,20 @@ describe("Evaluation", () => {
     expect(within(loo).queryByRole("link")).not.toBeInTheDocument();
   });
 
+  it("never calls a routing case synthetic while the incident list is unknown", async () => {
+    vi.spyOn(client, "unwrap").mockImplementation(async (request) => {
+      const { data } = await request;
+      if (Array.isArray(data)) throw new ApiRequestError(500, { error: "server_error", detail: "Incidents unavailable" });
+      return data as never;
+    });
+    renderApp("/evaluation");
+    const id = evalReport.loo.rows[0]!.incident_id;
+    await screen.findByRole("heading", { name: "Leave-one-out routing" });
+    const cell = await within(section("Leave-one-out routing")).findByText(id);
+    expect(cell).not.toHaveAttribute("title");
+    expect(within(section("Leave-one-out routing")).queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("shows an honest empty state when the evaluation has not run", async () => {
     const empty: EvalReport = {
       generated_at: null, scenarios: [], false_merges: 0, ablation: [],

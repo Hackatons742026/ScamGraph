@@ -11,6 +11,7 @@ export function AblationTable({ rows, measured }: { rows: AblationRow[]; measure
     );
   }
   return (
+    <div className="flex flex-col gap-2">
     <table className="w-full text-sm">
       <thead className="text-left text-xs text-slate-500">
         <tr><th className="py-1 pr-2 font-medium">Configuration</th><th className="py-1 pr-2 text-right font-medium">Campaign P</th><th className="py-1 pr-2 text-right font-medium">Campaign R</th><th className="py-1 pr-2 text-right font-medium">False merges</th><th className="py-1 text-right font-medium">LOO routing</th></tr>
@@ -27,5 +28,7 @@ export function AblationTable({ rows, measured }: { rows: AblationRow[]; measure
         ))}
       </tbody>
     </table>
+    <p className="text-xs text-slate-500">LOO routing is the overall leave-one-out accuracy, repeated for each configuration (not measured per configuration).</p>
+    </div>
   );
 }

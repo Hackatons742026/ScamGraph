@@ -6,7 +6,8 @@ import { type LooReport, pct } from "./types";
 
 /** Leave-one-out routing: each incident is removed, memory rebuilt, and the incident classified against the rest.
  *  Only cases that are imported incidents link to their page; synthetic evaluation cases stay plain text. */
-export function LooRouting({ loo, incidentLabels }: { loo: LooReport; incidentLabels: ReadonlyMap<string, string> }) {
+/** `incidentLabels` is null while the incident list is unknown (loading or failed): then no case is called synthetic. */
+export function LooRouting({ loo, incidentLabels }: { loo: LooReport; incidentLabels: ReadonlyMap<string, string> | null }) {
   if (!loo.rows.length) return <p className="text-sm text-slate-500">No leave-one-out routing in this report.</p>;
   const { labels, matrix } = loo.confusion;
   const correct = loo.rows.filter((r) => r.correct).length;
@@ -45,9 +46,9 @@ export function LooRouting({ loo, incidentLabels }: { loo: LooReport; incidentLa
           {loo.rows.map((r) => (
             <tr key={r.incident_id} className="border-t border-slate-100">
               <td className="py-1.5 pr-2">
-                {incidentLabels.has(r.incident_id)
+                {incidentLabels?.has(r.incident_id)
                   ? <Link to={`/incidents/${encodeURIComponent(r.incident_id)}`} className="hover:underline">{incidentLabels.get(r.incident_id)}</Link>
-                  : <span className="text-slate-600" title="Synthetic evaluation case, not an imported incident">{r.incident_id}</span>}
+                  : <span className="text-slate-600" title={incidentLabels ? "Synthetic evaluation case, not an imported incident" : undefined}>{r.incident_id}</span>}
               </td>
               <td className="py-1.5 pr-2"><OutcomeBadge outcome={r.expected} /></td>
               <td className="py-1.5 pr-2"><OutcomeBadge outcome={r.predicted} /></td>

@@ -28,7 +28,7 @@ export function Evaluation() {
   const report = useQuery({ queryKey: ["eval-report"], queryFn: () => unwrap(api.GET("/api/eval/report")) });
   // Same query as the Incidents page (shared cache): LOO rows link only to incidents that exist.
   const incidents = useQuery({ queryKey: ["incidents"], queryFn: () => unwrap(api.GET("/api/incidents")) });
-  const incidentLabels = new Map((incidents.data ?? []).map((i) => [i.id, i.label]));
+  const incidentLabels = incidents.isSuccess ? new Map(incidents.data.map((i) => [i.id, i.label])) : null;
   return (
     <>
       <PageHeader title="Evaluation" description="Validation scenarios, pair metrics, leave-one-out routing and ablation. Only what was measured is shown." />
