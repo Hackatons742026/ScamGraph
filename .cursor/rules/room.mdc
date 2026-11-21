@@ -1,0 +1,12 @@
+---
+description: Team room protocol — always load context from the room MCP server
+alwaysApply: true
+---
+
+# Team room
+
+This project is built by a team of AI agents coordinated through the room **"ScamGraph"**
+(MCP server `room`). All instructions, the plan, tasks and shared decisions live there.
+
+**At the start of every session call the `get_context` tool of the `room` MCP server and follow it.**
+Re-read it after finishing each task. Follow `/team/workflow.md` from the room.
