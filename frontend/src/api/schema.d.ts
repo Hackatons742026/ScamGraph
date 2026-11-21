@@ -4,22 +4,6 @@
  */
 
 export interface paths {
-    "/api/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["health"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/import": {
         parameters: {
             query?: never;
@@ -29,7 +13,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["startImport"];
+        /** Start Import */
+        post: operations["start_import_api_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -43,7 +28,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getLatestRun"];
+        /** Latest Run */
+        get: operations["latest_run_api_runs_latest_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -52,14 +38,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/runs/{id}": {
+    "/api/runs/{run_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getRun"];
+        /** Get Run */
+        get: operations["get_run_api_runs__run_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -75,7 +62,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listIncidents"];
+        /** Incidents */
+        get: operations["incidents_api_incidents_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -84,14 +72,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/incidents/{id}": {
+    "/api/incidents/{incident_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getIncident"];
+        /** Incident */
+        get: operations["incident_api_incidents__incident_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -100,14 +89,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/artifacts/{id}": {
+    "/api/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getArtifact"];
+        /** Artifact */
+        get: operations["artifact_api_artifacts__artifact_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -116,14 +106,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/media/{id}": {
+    "/api/media/{media_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getMedia"];
+        /** Media */
+        get: operations["media_api_media__media_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -139,7 +130,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listCampaigns"];
+        /** Campaigns */
+        get: operations["campaigns_api_campaigns_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -148,14 +140,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/campaigns/{id}": {
+    "/api/campaigns/{campaign_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getCampaign"];
+        /** Campaign */
+        get: operations["campaign_api_campaigns__campaign_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -164,14 +157,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/campaigns/{id}/links": {
+    "/api/campaigns/{campaign_id}/links": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getCampaignLinks"];
+        /** Campaign Links */
+        get: operations["campaign_links_api_campaigns__campaign_id__links_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -187,7 +181,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getGraph"];
+        /** Graph */
+        get: operations["graph_api_graph_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -205,7 +200,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["classify"];
+        /** Classify */
+        post: operations["classify_api_classify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -219,41 +215,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getEvalReport"];
+        /** Evaluation */
+        get: operations["evaluation_api_eval_report_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/edges/{id}/decision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["decideEdge"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/campaigns/merge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["mergeCampaigns"];
         delete?: never;
         options?: never;
         head?: never;
@@ -269,7 +234,76 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["splitCampaign"];
+        /** Optional Mutation */
+        post: operations["optional_mutation_api_campaigns_split_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Optional Mutation */
+        post: operations["optional_mutation_api_campaigns_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/edges/{edge_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Optional Mutation */
+        post: operations["optional_mutation_api_edges__edge_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exports/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Campaign */
+        get: operations["export_campaign_api_exports__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health */
+        get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -280,350 +314,574 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @enum {string} */
-        Tier: "A" | "B" | "C";
-        /** @enum {string|null} */
-        Family: "kit" | "tds" | "domain" | "creative" | "hosting" | null;
-        /** @enum {string} */
-        Level: "campaign" | "network";
-        /** @enum {string} */
-        Outcome: "known_campaign" | "new_candidate" | "needs_review";
-        /** @enum {string} */
-        IncidentStatus: "in_campaign" | "unassigned" | "needs_review" | "new_candidate";
-        /** @enum {string} */
-        ArtifactKind: "har" | "html" | "mhtml" | "bundle" | "image" | "video" | "adlib_json" | "text" | "url" | "unknown";
-        /** @enum {string} */
-        ParseStatus: "ok" | "partial" | "failed" | "skipped";
-        /** @enum {string} */
-        FunnelRole: "ad" | "prelander" | "offer" | "order" | "unknown";
-        /** @enum {string} */
-        CoverageLevel: "ok" | "low";
-        /** @enum {string} */
-        RunStatus: "pending" | "running" | "done" | "failed";
-        /** @enum {string} */
-        ReasonKind: "match" | "coverage" | "conflict" | "weak";
-        /** @enum {string} */
-        DecisionKind: "confirm" | "reject";
-        ErrorResponse: {
-            error: string;
-            detail: string;
+        /** Ablation */
+        Ablation: {
+            /** Config */
+            config: string;
+            /** Campaign P */
+            campaign_p: number;
+            /** Campaign R */
+            campaign_r: number;
+            /** False Merges */
+            false_merges: number;
+            /** Loo Routing */
+            loo_routing: number;
         };
-        Health: {
-            status: string;
-            version: string;
-        };
-        EvidenceItem: {
-            id: string;
-            type: string;
-            tier: components["schemas"]["Tier"];
-            family: components["schemas"]["Family"];
-            display: string;
-            weight: number;
-            artifact_id: string;
-            funnel_step: number | null;
-            ignored: boolean;
-            /** @description cdn_ip | public_lib | placeholder_phone | small_doc | high_df | other */
-            ignore_reason: string | null;
-            detail: string | null;
-        };
-        Coverage: {
-            artifact_kinds: components["schemas"]["ArtifactKind"][];
-            has_har: boolean;
-            has_page: boolean;
-            has_image: boolean;
-            has_video: boolean;
-            has_adlib: boolean;
-            has_text: boolean;
-            level: components["schemas"]["CoverageLevel"];
-            badges: string[];
-        };
-        Reason: {
-            kind: components["schemas"]["ReasonKind"];
-            text: string;
-            evidence: components["schemas"]["EvidenceItem"][];
-        };
-        Decision: {
-            outcome: components["schemas"]["Outcome"];
-            campaign_id: string | null;
-            campaign_label: string | null;
-            reasons: components["schemas"]["Reason"][];
-            decided_at: string;
-        };
-        Edge: {
-            id: string;
-            source: string;
-            target: string;
-            level: components["schemas"]["Level"];
-            tier: components["schemas"]["Tier"];
-            families: string[];
-            score: number;
-            comparable: number;
-            low_confidence: boolean;
-            evidence: components["schemas"]["EvidenceItem"][];
-        };
-        ArtifactSummary: {
+        /** ArtifactDetail */
+        ArtifactDetail: {
+            /** Id */
             id: string;
             kind: components["schemas"]["ArtifactKind"];
+            /** Name Display */
             name_display: string;
+            /** Funnel Step */
             funnel_step: number | null;
             role: components["schemas"]["FunnelRole"] | null;
             parse_status: components["schemas"]["ParseStatus"];
+            /** Error */
             error: string | null;
+            /** Captured At */
             captured_at: string | null;
+            /** Duplicate Of */
             duplicate_of: string | null;
+            /** Observations */
             observations: number;
-        };
-        RedirectHop: {
-            seq: number;
-            url_display: string;
-            status: number | null;
-            /** @enum {string} */
-            kind: "3xx" | "meta" | "js";
-        };
-        FunnelStep: {
-            step: number;
-            role: components["schemas"]["FunnelRole"];
-            artifact_ids: string[];
-            domain_display: string | null;
-            redirect_chain: components["schemas"]["RedirectHop"][];
-        };
-        Media: {
-            id: string;
-            /** @enum {string} */
-            kind: "screenshot" | "frame" | "image";
-            frame_ts: number | null;
-            ocr_text: string | null;
-            width: number;
-            height: number;
-        };
-        IncidentSummary: {
-            id: string;
-            label: string;
-            first_seen: string | null;
-            last_seen: string | null;
-            artifact_count: number;
-            coverage: components["schemas"]["Coverage"];
-            status: components["schemas"]["IncidentStatus"];
-            campaign_id: string | null;
-            campaign_label: string | null;
-            network_id: string | null;
-            outcome: components["schemas"]["Outcome"] | null;
-            reason_summary?: string | null;
-        };
-        IncidentDetail: components["schemas"]["IncidentSummary"] & {
-            artifacts: components["schemas"]["ArtifactSummary"][];
-            funnel: components["schemas"]["FunnelStep"][];
-            evidence: components["schemas"]["EvidenceItem"][];
-            decision: components["schemas"]["Decision"] | null;
-            edges: components["schemas"]["Edge"][];
-        };
-        PageSummary: {
-            url_display: string;
-            domain_display: string;
-            title: string | null;
-            role: components["schemas"]["FunnelRole"] | null;
-        };
-        ArtifactDetail: components["schemas"]["ArtifactSummary"] & {
+            /** Pages */
             pages: components["schemas"]["PageSummary"][];
+            /** Redirect Chain */
             redirect_chain: components["schemas"]["RedirectHop"][];
+            /** Media */
             media: components["schemas"]["Media"][];
+            /** Ocr Text */
             ocr_text: string | null;
+            /** Request Count */
             request_count: number;
+            /** Hosts Display */
             hosts_display: string[];
         };
-        CampaignSummary: {
+        /**
+         * ArtifactKind
+         * @enum {string}
+         */
+        ArtifactKind: "har" | "html" | "mhtml" | "bundle" | "image" | "video" | "adlib_json" | "text" | "url" | "unknown";
+        /** ArtifactKindStats */
+        ArtifactKindStats: {
+            /** Total */
+            total: number;
+            /** Parsed */
+            parsed: number;
+            /** Failed */
+            failed: number;
+        };
+        /** ArtifactSummary */
+        ArtifactSummary: {
+            /** Id */
             id: string;
+            kind: components["schemas"]["ArtifactKind"];
+            /** Name Display */
+            name_display: string;
+            /** Funnel Step */
+            funnel_step: number | null;
+            role: components["schemas"]["FunnelRole"] | null;
+            parse_status: components["schemas"]["ParseStatus"];
+            /** Error */
+            error: string | null;
+            /** Captured At */
+            captured_at: string | null;
+            /** Duplicate Of */
+            duplicate_of: string | null;
+            /** Observations */
+            observations: number;
+        };
+        /** CampaignDetail */
+        CampaignDetail: {
+            /** Id */
+            id: string;
+            /** Label */
             label: string;
             level: components["schemas"]["Level"];
+            /** Size */
             size: number;
+            /** Incident Ids */
             incident_ids: string[];
+            /** First Seen */
             first_seen: string | null;
+            /** Last Seen */
             last_seen: string | null;
             strongest_evidence: components["schemas"]["EvidenceItem"] | null;
+            /** Network Id */
             network_id: string | null;
-        };
-        TimelineEntry: {
-            date: string;
-            incident_id: string;
-            event: string;
-        };
-        CampaignDetail: components["schemas"]["CampaignSummary"] & {
+            /** Members */
             members: components["schemas"]["IncidentSummary"][];
+            /** Edges */
             edges: components["schemas"]["Edge"][];
-            timeline: components["schemas"]["TimelineEntry"][];
+            /** Timeline */
+            timeline: components["schemas"]["TimelineItem"][];
         };
+        /** CampaignLink */
         CampaignLink: {
+            /** Other Id */
             other_id: string;
+            /** Other Label */
             other_label: string;
             level: components["schemas"]["Level"];
+            /** Shared Evidence */
             shared_evidence: components["schemas"]["EvidenceItem"][];
         };
-        GraphNode: {
+        /** CampaignSummary */
+        CampaignSummary: {
+            /** Id */
             id: string;
-            /** @enum {string} */
-            kind: "incident" | "campaign" | "network" | "unassigned";
+            /** Label */
             label: string;
+            level: components["schemas"]["Level"];
+            /** Size */
+            size: number;
+            /** Incident Ids */
+            incident_ids: string[];
+            /** First Seen */
+            first_seen: string | null;
+            /** Last Seen */
+            last_seen: string | null;
+            strongest_evidence: components["schemas"]["EvidenceItem"] | null;
+            /** Network Id */
+            network_id: string | null;
+        };
+        /** ClassifyResult */
+        ClassifyResult: {
+            outcome: components["schemas"]["Outcome"];
+            /** Campaign Id */
+            campaign_id: string | null;
+            /** Campaign Label */
+            campaign_label: string | null;
+            /** Reasons */
+            reasons: components["schemas"]["Reason"][];
+            coverage: components["schemas"]["Coverage"];
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceItem"][];
+            /** Candidate Edges */
+            candidate_edges: components["schemas"]["Edge"][];
+            /** Elapsed Ms */
+            elapsed_ms: number;
+        };
+        /** Confusion */
+        Confusion: {
+            /** Labels */
+            labels: components["schemas"]["Outcome"][];
+            /** Matrix */
+            matrix: number[][];
+        };
+        /** Coverage */
+        Coverage: {
+            /** Artifact Kinds */
+            artifact_kinds: string[];
+            /** Has Har */
+            has_har: boolean;
+            /** Has Page */
+            has_page: boolean;
+            /** Has Image */
+            has_image: boolean;
+            /** Has Video */
+            has_video: boolean;
+            /** Has Adlib */
+            has_adlib: boolean;
+            /** Has Text */
+            has_text: boolean;
+            level: components["schemas"]["CoverageLevel"];
+            /** Badges */
+            badges: string[];
+        };
+        /**
+         * CoverageLevel
+         * @enum {string}
+         */
+        CoverageLevel: "ok" | "low";
+        /** Decision */
+        Decision: {
+            outcome: components["schemas"]["Outcome"];
+            /** Campaign Id */
+            campaign_id: string | null;
+            /** Campaign Label */
+            campaign_label: string | null;
+            /** Reasons */
+            reasons: components["schemas"]["Reason"][];
+            /** Decided At */
+            decided_at: string;
+        };
+        /** Edge */
+        Edge: {
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            level: components["schemas"]["Level"];
+            tier: components["schemas"]["Tier"];
+            /** Families */
+            families: string[];
+            /** Score */
+            score: number;
+            /** Comparable */
+            comparable: number;
+            /** Low Confidence */
+            low_confidence: boolean;
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceItem"][];
+        };
+        /** ErrorResponse */
+        ErrorResponse: {
+            /** Error */
+            error: string;
+            /** Detail */
+            detail: string;
+        };
+        /** EvalReport */
+        EvalReport: {
+            /** Generated At */
+            generated_at: string | null;
+            /** Scenarios */
+            scenarios: components["schemas"]["Scenario"][];
+            pairs: components["schemas"]["PairReport"];
+            /** False Merges */
+            false_merges: number;
+            loo: components["schemas"]["LooReport"];
+            /** Ablation */
+            ablation: components["schemas"]["Ablation"][];
+        };
+        /** EvidenceItem */
+        EvidenceItem: {
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+            tier: components["schemas"]["Tier"];
+            family: components["schemas"]["Family"] | null;
+            /** Display */
+            display: string;
+            /** Weight */
+            weight: number;
+            /** Artifact Id */
+            artifact_id: string;
+            /** Funnel Step */
+            funnel_step: number | null;
+            /** Ignored */
+            ignored: boolean;
+            /** Ignore Reason */
+            ignore_reason?: string | null;
+            /** Detail */
+            detail?: string | null;
+        };
+        /**
+         * Family
+         * @enum {string}
+         */
+        Family: "kit" | "tds" | "domain" | "creative" | "hosting";
+        /**
+         * FunnelRole
+         * @enum {string}
+         */
+        FunnelRole: "ad" | "prelander" | "offer" | "order" | "unknown";
+        /** FunnelStep */
+        FunnelStep: {
+            /** Step */
+            step: number;
+            /** Role */
+            role: string;
+            /** Artifact Ids */
+            artifact_ids: string[];
+            /** Domain Display */
+            domain_display: string | null;
+            /** Redirect Chain */
+            redirect_chain: components["schemas"]["RedirectHop"][];
+        };
+        /** GraphNode */
+        GraphNode: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "incident" | "campaign" | "network" | "unassigned";
+            /** Label */
+            label: string;
+            /** Parent */
             parent: string | null;
             outcome: components["schemas"]["Outcome"] | null;
             coverage_level: components["schemas"]["CoverageLevel"] | null;
         };
+        /** GraphResponse */
         GraphResponse: {
+            /** Nodes */
             nodes: components["schemas"]["GraphNode"][];
+            /** Edges */
             edges: components["schemas"]["Edge"][];
         };
-        ImportRequest: {
-            path?: string;
-        };
-        ImportResponse: {
+        /** ImportAccepted */
+        ImportAccepted: {
+            /** Run Id */
             run_id: string;
         };
-        ArtifactKindStats: {
-            total: number;
-            parsed: number;
-            failed: number;
+        /** ImportRequest */
+        ImportRequest: {
+            /** Path */
+            path?: string | null;
         };
-        RunSummary: {
+        /** IncidentDetail */
+        IncidentDetail: {
+            /** Id */
             id: string;
-            status: components["schemas"]["RunStatus"];
-            started_at: string;
-            finished_at: string | null;
-            incidents: number;
-            artifacts: number;
-            artifacts_by_kind: {
-                [key: string]: components["schemas"]["ArtifactKindStats"];
-            };
-            unique_artifacts: number;
-            duplicates: number;
-            campaigns: number;
-            networks: number;
-            unassigned: number;
-            needs_review: number;
-            new_candidates: number;
-            secrets_redacted: number;
-            error: string | null;
-        };
-        ClassifyResult: {
-            outcome: components["schemas"]["Outcome"];
-            campaign_id: string | null;
-            campaign_label: string | null;
-            reasons: components["schemas"]["Reason"][];
+            /** Label */
+            label: string;
+            /** First Seen */
+            first_seen: string | null;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Artifact Count */
+            artifact_count: number;
             coverage: components["schemas"]["Coverage"];
+            status: components["schemas"]["IncidentStatus"];
+            /** Campaign Id */
+            campaign_id: string | null;
+            /** Campaign Label */
+            campaign_label: string | null;
+            /** Network Id */
+            network_id: string | null;
+            outcome: components["schemas"]["Outcome"] | null;
+            /** Reason Summary */
+            reason_summary?: string | null;
+            /** Artifacts */
+            artifacts: components["schemas"]["ArtifactSummary"][];
+            /** Funnel */
+            funnel: components["schemas"]["FunnelStep"][];
+            /** Evidence */
             evidence: components["schemas"]["EvidenceItem"][];
-            candidate_edges: components["schemas"]["Edge"][];
-            elapsed_ms: number;
+            decision: components["schemas"]["Decision"] | null;
+            /** Edges */
+            edges: components["schemas"]["Edge"][];
         };
+        /**
+         * IncidentStatus
+         * @enum {string}
+         */
+        IncidentStatus: "in_campaign" | "unassigned" | "needs_review" | "new_candidate";
+        /** IncidentSummary */
+        IncidentSummary: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** First Seen */
+            first_seen: string | null;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Artifact Count */
+            artifact_count: number;
+            coverage: components["schemas"]["Coverage"];
+            status: components["schemas"]["IncidentStatus"];
+            /** Campaign Id */
+            campaign_id: string | null;
+            /** Campaign Label */
+            campaign_label: string | null;
+            /** Network Id */
+            network_id: string | null;
+            outcome: components["schemas"]["Outcome"] | null;
+            /** Reason Summary */
+            reason_summary?: string | null;
+        };
+        /**
+         * Level
+         * @enum {string}
+         */
+        Level: "campaign" | "network";
+        /** LooReport */
+        LooReport: {
+            /** Accuracy */
+            accuracy: number;
+            /** Rows */
+            rows: components["schemas"]["LooRow"][];
+            confusion: components["schemas"]["Confusion"];
+        };
+        /** LooRow */
+        LooRow: {
+            /** Incident Id */
+            incident_id: string;
+            expected: components["schemas"]["Outcome"];
+            predicted: components["schemas"]["Outcome"];
+            /** Correct */
+            correct: boolean;
+        };
+        /** Media */
+        Media: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "screenshot" | "frame" | "image";
+            /** Frame Ts */
+            frame_ts: number | null;
+            /** Ocr Text */
+            ocr_text: string | null;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+        };
+        /** MetricSet */
         MetricSet: {
+            /** Precision */
             precision: number;
+            /** Recall */
             recall: number;
+            /** F1 */
             f1: number;
+            /** Tp */
             tp: number;
+            /** Fp */
             fp: number;
+            /** Fn */
             fn: number;
         };
-        EvalScenario: {
-            /** @enum {integer} */
-            id: 1 | 2 | 3 | 4 | 5 | 6 | 7;
-            name: string;
-            criterion: string;
-            passed: boolean;
-            details: string;
+        /**
+         * Outcome
+         * @enum {string}
+         */
+        Outcome: "known_campaign" | "new_candidate" | "needs_review";
+        /** PageSummary */
+        PageSummary: {
+            /** Url Display */
+            url_display: string;
+            /** Domain Display */
+            domain_display: string;
+            /** Title */
+            title: string | null;
+            /** Role */
+            role: string | null;
         };
-        EvalPairs: {
+        /** PairReport */
+        PairReport: {
+            /** N Pairs */
             n_pairs: number;
+            /** Mentor Verified */
             mentor_verified: number;
+            /** Agreement */
             agreement: number | null;
             campaign: components["schemas"]["MetricSet"];
             network: components["schemas"]["MetricSet"];
         };
-        LooRow: {
+        /**
+         * ParseStatus
+         * @enum {string}
+         */
+        ParseStatus: "ok" | "partial" | "failed" | "skipped";
+        /** Reason */
+        Reason: {
+            kind: components["schemas"]["ReasonKind"];
+            /** Text */
+            text: string;
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceItem"][];
+        };
+        /**
+         * ReasonKind
+         * @enum {string}
+         */
+        ReasonKind: "match" | "coverage" | "conflict" | "weak";
+        /** RedirectHop */
+        RedirectHop: {
+            /** Seq */
+            seq: number;
+            /** Url Display */
+            url_display: string;
+            /** Status */
+            status: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "3xx" | "meta" | "js";
+        };
+        /**
+         * RunStatus
+         * @enum {string}
+         */
+        RunStatus: "pending" | "running" | "done" | "failed";
+        /** RunSummary */
+        RunSummary: {
+            /** Id */
+            id: string;
+            status: components["schemas"]["RunStatus"];
+            /** Started At */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Incidents */
+            incidents: number;
+            /** Artifacts */
+            artifacts: number;
+            /** Artifacts By Kind */
+            artifacts_by_kind: {
+                [key: string]: components["schemas"]["ArtifactKindStats"];
+            };
+            /** Unique Artifacts */
+            unique_artifacts: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Campaigns */
+            campaigns: number;
+            /** Networks */
+            networks: number;
+            /** Unassigned */
+            unassigned: number;
+            /** Needs Review */
+            needs_review: number;
+            /** New Candidates */
+            new_candidates: number;
+            /** Secrets Redacted */
+            secrets_redacted: number;
+            /** Error */
+            error: string | null;
+        };
+        /** Scenario */
+        Scenario: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Criterion */
+            criterion: string;
+            /** Passed */
+            passed: boolean;
+            /** Details */
+            details: string;
+        };
+        /**
+         * Tier
+         * @enum {string}
+         */
+        Tier: "A" | "B" | "C";
+        /** TimelineItem */
+        TimelineItem: {
+            /** Date */
+            date: string;
+            /** Incident Id */
             incident_id: string;
-            expected: components["schemas"]["Outcome"];
-            predicted: components["schemas"]["Outcome"];
-            correct: boolean;
-        };
-        LooReport: {
-            accuracy: number;
-            rows: components["schemas"]["LooRow"][];
-            confusion: {
-                labels: components["schemas"]["Outcome"][];
-                matrix: number[][];
-            };
-        };
-        AblationRow: {
-            config: string;
-            campaign_p: number;
-            campaign_r: number;
-            false_merges: number;
-            loo_routing: number;
-        };
-        EvalReport: {
-            generated_at: string | null;
-            scenarios: components["schemas"]["EvalScenario"][];
-            pairs: components["schemas"]["EvalPairs"];
-            false_merges: number;
-            loo: components["schemas"]["LooReport"];
-            ablation: components["schemas"]["AblationRow"][];
-        };
-        EdgeDecisionRequest: {
-            decision: components["schemas"]["DecisionKind"];
-            note?: string;
-        };
-        EdgeDecisionResponse: {
-            edge_id: string;
-            decision: components["schemas"]["DecisionKind"];
-            recorded_at: string;
-        };
-        MergeRequest: {
-            campaign_ids: string[];
-            note?: string;
-        };
-        SplitRequest: {
-            campaign_id: string;
-            incident_ids: string[];
-            note?: string;
+            /** Event */
+            event: string;
         };
     };
-    responses: {
-        /** @description Error */
-        Error: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-    };
-    parameters: {
-        Id: string;
-    };
+    responses: never;
+    parameters: never;
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    health: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Health"];
-                };
-            };
-        };
-    };
-    startImport: {
+    start_import_api_import_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -632,23 +890,58 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["ImportRequest"];
+                "application/json": components["schemas"]["ImportRequest"] | null;
             };
         };
         responses: {
-            /** @description Accepted */
+            /** @description Successful Response */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportResponse"];
+                    "application/json": components["schemas"]["ImportAccepted"];
                 };
             };
-            422: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getLatestRun: {
+    latest_run_api_runs_latest_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -657,7 +950,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -666,21 +959,56 @@ export interface operations {
                     "application/json": components["schemas"]["RunSummary"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getRun: {
+    get_run_api_runs__run_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                run_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -689,15 +1017,49 @@ export interface operations {
                     "application/json": components["schemas"]["RunSummary"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    listIncidents: {
+    incidents_api_incidents_get: {
         parameters: {
             query?: {
-                /** @description Comma-separated IncidentStatus values */
-                status?: string;
-                campaign?: string;
+                status?: string | null;
+                campaign?: string | null;
             };
             header?: never;
             path?: never;
@@ -705,7 +1067,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -714,20 +1076,56 @@ export interface operations {
                     "application/json": components["schemas"]["IncidentSummary"][];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getIncident: {
+    incident_api_incidents__incident_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                incident_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -736,21 +1134,56 @@ export interface operations {
                     "application/json": components["schemas"]["IncidentDetail"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getArtifact: {
+    artifact_api_artifacts__artifact_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                artifact_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -759,35 +1192,104 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDetail"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getMedia: {
+    media_api_media__media_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                media_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Image bytes */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "image/jpeg": string;
-                    "image/png": string;
-                    "image/webp": string;
+                    "application/json": unknown;
+                    "image/png": unknown;
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    listCampaigns: {
+    campaigns_api_campaigns_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -796,7 +1298,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -805,20 +1307,56 @@ export interface operations {
                     "application/json": components["schemas"]["CampaignSummary"][];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getCampaign: {
+    campaign_api_campaigns__campaign_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                campaign_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -827,21 +1365,56 @@ export interface operations {
                     "application/json": components["schemas"]["CampaignDetail"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getCampaignLinks: {
+    campaign_links_api_campaigns__campaign_id__links_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                campaign_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -850,17 +1423,50 @@ export interface operations {
                     "application/json": components["schemas"]["CampaignLink"][];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getGraph: {
+    graph_api_graph_get: {
         parameters: {
             query?: {
-                campaign?: string;
-                /** @description Comma-separated tiers, e.g. A,B */
-                tiers?: string;
-                /** @description Comma-separated levels, e.g. campaign,network */
-                levels?: string;
+                campaign?: string | null;
+                tiers?: string | null;
+                levels?: string | null;
             };
             header?: never;
             path?: never;
@@ -868,7 +1474,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -877,16 +1483,52 @@ export interface operations {
                     "application/json": components["schemas"]["GraphResponse"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    classify: {
+    classify_api_classify_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "multipart/form-data": {
                     files?: string[];
@@ -897,7 +1539,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -906,11 +1548,45 @@ export interface operations {
                     "application/json": components["schemas"]["ClassifyResult"];
                 };
             };
-            413: components["responses"]["Error"];
-            422: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getEvalReport: {
+    evaluation_api_eval_report_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -919,7 +1595,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -928,83 +1604,263 @@ export interface operations {
                     "application/json": components["schemas"]["EvalReport"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    decideEdge: {
+    optional_mutation_api_campaigns_split_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Successful Response */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    optional_mutation_api_campaigns_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Successful Response */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    optional_mutation_api_edges__edge_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Successful Response */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_campaign_api_exports__name__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["Id"];
+                name: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EdgeDecisionRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EdgeDecisionResponse"];
+                    "application/json": unknown;
                 };
             };
-            501: components["responses"]["Error"];
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    mergeCampaigns: {
+    health_api_health_get: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MergeRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CampaignDetail"];
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
-            501: components["responses"]["Error"];
-        };
-    };
-    splitCampaign: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SplitRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CampaignDetail"][];
-                };
-            };
-            501: components["responses"]["Error"];
         };
     };
 }

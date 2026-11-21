@@ -24,7 +24,7 @@ export function ImportRunButton() {
 
   const activeRun = useQuery({
     queryKey: ["runs", runId, pollKey],
-    queryFn: () => unwrap(api.GET("/api/runs/{id}", { params: { path: { id: runId! } } })),
+    queryFn: () => unwrap(api.GET("/api/runs/{run_id}", { params: { path: { run_id: runId! } } })),
     enabled: !!runId && pollKey > 0,
     refetchInterval: (q) => (isActive(q.state.data?.status) ? 400 : false),
   });

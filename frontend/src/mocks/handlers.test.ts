@@ -2,13 +2,14 @@
 // Node env: jsdom's File/FormData can't be serialised by Node's native Request (multipart with files hangs).
 import { describe, expect, it } from "vitest";
 import { api, ApiRequestError, unwrap } from "@/api/client";
+import { mockFetch } from "./handlers";
 
 describe("mock transport covers contract v1", () => {
   it("serves health, runs and import", async () => {
     expect((await unwrap(api.GET("/api/health"))).status).toBe("ok");
     const run = await unwrap(api.GET("/api/runs/latest"));
     expect(run.status).toBe("done");
-    expect((await unwrap(api.GET("/api/runs/{id}", { params: { path: { id: run.id } } }))).id).toBe(run.id);
+    expect((await unwrap(api.GET("/api/runs/{run_id}", { params: { path: { run_id: run.id } } }))).id).toBe(run.id);
     const started = await api.POST("/api/import", { body: {} });
     expect(started.response.status).toBe(202);
     expect(started.data?.run_id).toBe(run.id);
@@ -26,13 +27,13 @@ describe("mock transport covers contract v1", () => {
 
   it("serves incident, artifact, campaign, links and graph details", async () => {
     const [first] = await unwrap(api.GET("/api/incidents"));
-    const detail = await unwrap(api.GET("/api/incidents/{id}", { params: { path: { id: first!.id } } }));
+    const detail = await unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: first!.id } } }));
     expect(detail.evidence.every((e) => typeof e.display === "string" && e.tier)).toBe(true);
-    const artifact = await unwrap(api.GET("/api/artifacts/{id}", { params: { path: { id: detail.artifacts[0]!.id } } }));
+    const artifact = await unwrap(api.GET("/api/artifacts/{artifact_id}", { params: { path: { artifact_id: detail.artifacts[0]!.id } } }));
     expect(artifact.id).toBe(detail.artifacts[0]!.id);
     const [camp] = await unwrap(api.GET("/api/campaigns"));
-    expect((await unwrap(api.GET("/api/campaigns/{id}", { params: { path: { id: camp!.id } } }))).members.length).toBe(camp!.size);
-    expect(Array.isArray(await unwrap(api.GET("/api/campaigns/{id}/links", { params: { path: { id: camp!.id } } })))).toBe(true);
+    expect((await unwrap(api.GET("/api/campaigns/{campaign_id}", { params: { path: { campaign_id: camp!.id } } }))).members.length).toBe(camp!.size);
+    expect(Array.isArray(await unwrap(api.GET("/api/campaigns/{campaign_id}/links", { params: { path: { campaign_id: camp!.id } } })))).toBe(true);
     const graph = await unwrap(api.GET("/api/graph", { params: { query: { tiers: "A" } } }));
     expect(graph.edges.length).toBeGreaterThan(0);
     expect(graph.edges.every((e) => e.tier === "A")).toBe(true);
@@ -40,10 +41,14 @@ describe("mock transport covers contract v1", () => {
   });
 
   it("returns contract errors: 404 for unknown ids, 501 for overrides", async () => {
-    await expect(unwrap(api.GET("/api/incidents/{id}", { params: { path: { id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
-    const res = await api.POST("/api/edges/{id}/decision", { params: { path: { id: "x" } }, body: { decision: "confirm" } });
-    expect(res.response.status).toBe(501);
-    expect(res.error).toMatchObject({ error: "not_implemented" });
+    await expect(unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
+    // The live OpenAPI declares no path param or body for the not-yet-enabled override routes (#9), so the typed
+    // client can't build this request: exercise the mock transport directly with a real URL and contract body.
+    const res = await mockFetch(new Request("http://localhost/api/edges/edge_alpha/decision", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision: "confirm", note: "Synthetic note" }),
+    }));
+    expect(res.status).toBe(501);
+    expect(await res.json()).toMatchObject({ error: "not_implemented" });
   });
 
   it("classify returns all three outcomes and validates empty input", async () => {
