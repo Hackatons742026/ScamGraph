@@ -1,6 +1,6 @@
-import type { Coverage, Family, Outcome, Tier } from "@/api/types";
+import type { Coverage, Family, IncidentStatus, Outcome, Tier } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
-import { FAMILY, OUTCOME, TIER } from "@/lib/domain";
+import { FAMILY, OUTCOME, STATUS, TIER } from "@/lib/domain";
 
 export function TierBadge({ tier }: { tier: Tier }) {
   const t = TIER[tier];
@@ -50,4 +50,15 @@ const OUTCOME_VARIANT = { known_campaign: "danger", new_candidate: "outline", ne
 export function OutcomeBadge({ outcome }: { outcome: Outcome | null }) {
   if (!outcome) return <Badge>no decision</Badge>;
   return <Badge variant={OUTCOME_VARIANT[outcome]}>{OUTCOME[outcome]}</Badge>;
+}
+
+const STATUS_VARIANT = {
+  in_campaign: "success",
+  unassigned: "outline",
+  needs_review: "warning",
+  new_candidate: "default",
+} as const;
+
+export function StatusBadge({ status }: { status: IncidentStatus }) {
+  return <Badge variant={STATUS_VARIANT[status]}>{STATUS[status]}</Badge>;
 }

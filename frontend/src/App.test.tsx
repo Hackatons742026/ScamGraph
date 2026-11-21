@@ -10,7 +10,9 @@ describe("app shell (mock mode)", () => {
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(within(nav).getAllByRole("link")).toHaveLength(7);
     expect(screen.getByRole("note")).toHaveTextContent(/synthetic data only/i);
-    expect(await screen.findByText(new RegExp(`${incidents.length} incidents`))).toBeInTheDocument();
+    expect(await screen.findByText("Latest run")).toBeInTheDocument();
+    const main = screen.getByRole("main");
+    expect(within(main).getByText("Incidents").closest("div")).toHaveTextContent(String(incidents.length));
   });
 
   it.each([

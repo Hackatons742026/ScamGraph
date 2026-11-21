@@ -14,6 +14,22 @@ const orNotFound = <T>(value: T | undefined, what: string): T => {
 };
 const csv = (url: URL, key: string) => url.searchParams.get(key)?.split(",").filter(Boolean) ?? [];
 
+/** After POST /api/import, the next few GET /api/runs/{id} responses look "running" so the Overview progress UI can be exercised. */
+let importPollsLeft = 0;
+
+/** Clears in-memory mock run progress between tests. */
+export function resetMockState() {
+  importPollsLeft = 0;
+}
+
+function runSnapshot() {
+  if (importPollsLeft > 0) {
+    importPollsLeft -= 1;
+    return { ...db.latestRun, status: "running" as const, finished_at: null, error: null };
+  }
+  return db.latestRun;
+}
+
 async function classify(req: Request): Promise<ClassifyResult> {
   const form = await req.formData();
   const files = form.getAll("files").filter((f): f is File => typeof f !== "string");
@@ -46,9 +62,13 @@ async function classify(req: Request): Promise<ClassifyResult> {
 
 const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus?: number]> = [
   ["GET", /^\/api\/health$/, () => ({ status: "ok", version: "1" })],
-  ["POST", /^\/api\/import$/, () => ({ run_id: db.latestRun.id }), 202],
-  ["GET", /^\/api\/runs\/latest$/, () => db.latestRun],
-  ["GET", /^\/api\/runs\/([^/]+)$/, ([id]) => (id === db.latestRun.id ? db.latestRun : orNotFound(undefined, "Run"))],
+  ["POST", /^\/api\/import$/, () => {
+    // Two "running" polls in tests; a few more outside tests so the progress label is visible.
+    importPollsLeft = import.meta.env.MODE === "test" ? 2 : 4;
+    return { run_id: db.latestRun.id };
+  }, 202],
+  ["GET", /^\/api\/runs\/latest$/, () => runSnapshot()],
+  ["GET", /^\/api\/runs\/([^/]+)$/, ([id]) => (id === db.latestRun.id ? runSnapshot() : orNotFound(undefined, "Run"))],
   ["GET", /^\/api\/incidents$/, (_, url) => {
     const status = csv(url, "status");
     const campaign = url.searchParams.get("campaign");

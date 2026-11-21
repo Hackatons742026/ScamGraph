@@ -1,13 +1,20 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Coverage, Family, Outcome, Tier } from "@/api/types";
+import type { Coverage, Family, IncidentStatus, Outcome, Tier } from "@/api/types";
 import { badgeVariants } from "@/components/ui/badge";
-import { CoverageBadges, FamilyLabel, OutcomeBadge, TierBadge } from "./badges";
+import { STATUS } from "@/lib/domain";
+import { CoverageBadges, FamilyLabel, OutcomeBadge, StatusBadge, TierBadge } from "./badges";
 
 // Exhaustive by type: adding a value to the contract enum breaks the type check until it is listed here.
 const TIERS = Object.keys({ A: 1, B: 1, C: 1 } satisfies Record<Tier, 1>) as Tier[];
 const FAMILIES = Object.keys({ kit: 1, tds: 1, domain: 1, creative: 1, hosting: 1 } satisfies Record<NonNullable<Family>, 1>) as NonNullable<Family>[];
 const OUTCOMES = Object.keys({ known_campaign: 1, new_candidate: 1, needs_review: 1 } satisfies Record<Outcome, 1>) as Outcome[];
+const STATUSES = Object.keys({
+  in_campaign: 1,
+  unassigned: 1,
+  needs_review: 1,
+  new_candidate: 1,
+} satisfies Record<IncidentStatus, 1>) as IncidentStatus[];
 
 const classesOf = (variant: "default" | "warning" | "success" | "danger" | "outline") => badgeVariants({ variant }).split(" ");
 
@@ -120,5 +127,13 @@ describe("OutcomeBadge", () => {
   it('shows "no decision" for a null outcome', () => {
     render(<OutcomeBadge outcome={null} />);
     expect(screen.getByText("no decision")).toBeInTheDocument();
+  });
+});
+
+describe("StatusBadge", () => {
+  it.each(STATUSES)("status %s has a human label", (status) => {
+    render(<StatusBadge status={status} />);
+    expect(screen.getByText(STATUS[status])).toBeInTheDocument();
+    expect(screen.queryByText(status)).not.toBeInTheDocument();
   });
 });

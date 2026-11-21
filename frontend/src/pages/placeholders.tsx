@@ -2,10 +2,6 @@
 import { useParams } from "react-router";
 import { ComingSoon, PageHeader } from "@/components/layout/PageHeader";
 
-export function Incidents() {
-  return (<><PageHeader title="Incidents" description="Every reported case, with coverage and status." /><ComingSoon task="#3" /></>);
-}
-
 export function IncidentDetail() {
   const { id } = useParams();
   return (<><PageHeader title="Incident detail" description={id ? `Incident ${id}` : undefined} /><ComingSoon task="#4" /></>);
