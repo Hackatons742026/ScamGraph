@@ -53,7 +53,7 @@ def test_live_import_requires_configured_data_dir(tmp_path, monkeypatch):
     assert accepted.status_code == 202 and client.get(f"/api/runs/{run_id}").json()["status"] == "done"
     repo = Repository(tmp_path / "live.db")
     with sqlite3.connect(repo.path) as db: assert db.execute("SELECT count(*) FROM runs").fetchone()[0] == 1
-    assert repo.list_decisions()
+    assert repo.list_decisions() and client.get("/api/incidents").json()[0]["reason_summary"]
 def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "live.db"))
     monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(tmp_path / "cache"))

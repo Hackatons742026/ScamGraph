@@ -62,8 +62,10 @@ def incident(incident_id: str) -> IncidentDetail:
         edges = [live.edge(e) for e in repo.list_edges()
                  if incident_id in {e["a_incident"], e["b_incident"]}]
         decision_row = next((d for d in repo.list_decisions() if d["incident_id"] == incident_id), None)
+        reason_kind = "match" if decision_row and decision_row["outcome"] == "known_campaign" else "coverage"
         decision = Decision(outcome=decision_row["outcome"], campaign_id=decision_row["campaign_id"],
-            campaign_label=decision_row["campaign_id"], reasons=[], decided_at=decision_row["decided_at"]) if decision_row else None
+            campaign_label=decision_row["campaign_id"], reasons=[Reason(kind=reason_kind, text=text, evidence=[])
+            for text in __import__("json").loads(decision_row["reasons_json"])], decided_at=decision_row["decided_at"]) if decision_row else None
         return IncidentDetail(**item.model_dump(), artifacts=artifacts, funnel=[], evidence=evidence,
             decision=decision, edges=edges)
     if incident_id != seed.INCIDENT.id: raise HTTPException(404, "Incident not found")

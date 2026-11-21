@@ -82,13 +82,15 @@ def incident(repo: Repository, row: dict) -> IncidentSummary:
                    if item["campaign_id"] in campaign_ids}
     campaign_id = memberships.get(row["id"])
     decision = next((item for item in repo.list_decisions() if item["incident_id"] == row["id"]), None)
+    reasons = json.loads(decision["reasons_json"]) if decision else []
     artifacts = repo.get_artifacts(row["id"])
     outcome = decision["outcome"] if decision else None
     status = "in_campaign" if campaign_id else outcome or "unassigned"
     return IncidentSummary(id=row["id"], label="Incident",
         first_seen=row["first_seen"], last_seen=row["last_seen"], artifact_count=len(artifacts),
         coverage=coverage(row["coverage_json"]), status=status, campaign_id=campaign_id,
-        campaign_label=campaign_id, network_id=None, outcome=outcome)
+        campaign_label=campaign_id, network_id=None, outcome=outcome,
+        reason_summary=reasons[0] if reasons else None)
 def evidence(row: dict) -> EvidenceItem:
     return EvidenceItem(id=f"evidence-{row['id']}", type=row["type"], tier=row["tier"],
         family=row["family"], display=row["display_value"], weight=row["weight"],
