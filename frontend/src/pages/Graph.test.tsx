@@ -73,8 +73,19 @@ describe("Investigation graph", () => {
     expect(panel).toHaveTextContent(`${weak.comparable} evidence types could be compared`);
     expect(panel).toHaveTextContent(/Missing data never counts as a difference/);
     expect(within(panel).getByText(weak.evidence[0]!.display)).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Reject" })).toBeInTheDocument();
     await userEvent.click(within(panel).getByRole("button", { name: "Close link evidence" }));
     expect(screen.queryByRole("complementary", { name: "Link evidence" })).not.toBeInTheDocument();
+  });
+
+  it("records an analyst confirm from the edge panel", async () => {
+    renderApp("/graph");
+    await screen.findByRole("table");
+    await userEvent.click(within(linkRows()[0]!).getByRole("button"));
+    const panel = screen.getByRole("complementary", { name: "Link evidence" });
+    await userEvent.click(within(panel).getByRole("button", { name: "Confirm" }));
+    expect(await within(panel).findByRole("status")).toHaveTextContent(/Confirmed · recorded at/);
   });
 
   it("explains that a shared site kit alone is a network link, and opens it from a canvas tap", async () => {

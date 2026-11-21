@@ -120,11 +120,26 @@ const camp = (id: string, label: string, ids: string[], strongest: EvidenceItem)
   last_seen: "2026-11-03T18:00:00Z", strongest_evidence: strongest, network_id: "net_kit",
 });
 
-export const campaigns: CampaignSummary[] = [
+function cloneCampaigns(rows: CampaignSummary[]): CampaignSummary[] {
+  return rows.map((c) => ({ ...c, incident_ids: [...c.incident_ids] }));
+}
+
+const CAMPAIGNS_SEED: CampaignSummary[] = [
   camp("camp_alpha", "Synthetic Campaign Alpha", ["inc_alpha_1", "inc_alpha_2"], evidence.pixel),
   camp("camp_beta", "Synthetic Campaign Beta", ["inc_beta_1", "inc_beta_2"], evidence.creative),
   { ...camp("net_kit", "Synthetic shared-kit network", ["inc_alpha_1", "inc_alpha_2", "inc_beta_1", "inc_beta_2"], evidence.kit), level: "network", network_id: null },
 ];
+
+/** Mutable campaign list — merge/split mocks persist here so invalidate + refetch shows a change. */
+export const campaigns: CampaignSummary[] = cloneCampaigns(CAMPAIGNS_SEED);
+
+const INCIDENT_CAMPAIGN_SEED = incidents.map((i) => ({
+  id: i.id,
+  campaign_id: i.campaign_id,
+  campaign_label: i.campaign_label,
+  status: i.status,
+  outcome: i.outcome,
+}));
 
 export function campaignDetail(id: string): CampaignDetail | undefined {
   const c = campaigns.find((x) => x.id === id);
@@ -143,16 +158,32 @@ export function campaignLinks(id: string): CampaignLink[] {
   return [];
 }
 
+const GRAPH_NODES_SEED: GraphResponse["nodes"] = [
+  { id: "net_kit", kind: "network", label: "Shared-kit network", parent: null, outcome: null, coverage_level: null },
+  { id: "camp_alpha", kind: "campaign", label: "Campaign Alpha", parent: "net_kit", outcome: null, coverage_level: null },
+  { id: "camp_beta", kind: "campaign", label: "Campaign Beta", parent: "net_kit", outcome: null, coverage_level: null },
+  { id: "unassigned", kind: "unassigned", label: "Unassigned", parent: null, outcome: null, coverage_level: null },
+  ...incidents.map((i) => ({ id: i.id, kind: "incident" as const, label: i.label.replace("Synthetic incident ", ""), parent: i.campaign_id ?? "unassigned", outcome: i.outcome, coverage_level: i.coverage.level })),
+];
+
 export const graph: GraphResponse = {
-  nodes: [
-    { id: "net_kit", kind: "network", label: "Shared-kit network", parent: null, outcome: null, coverage_level: null },
-    { id: "camp_alpha", kind: "campaign", label: "Campaign Alpha", parent: "net_kit", outcome: null, coverage_level: null },
-    { id: "camp_beta", kind: "campaign", label: "Campaign Beta", parent: "net_kit", outcome: null, coverage_level: null },
-    { id: "unassigned", kind: "unassigned", label: "Unassigned", parent: null, outcome: null, coverage_level: null },
-    ...incidents.map((i) => ({ id: i.id, kind: "incident" as const, label: i.label.replace("Synthetic incident ", ""), parent: i.campaign_id ?? "unassigned", outcome: i.outcome, coverage_level: i.coverage.level })),
-  ],
+  nodes: GRAPH_NODES_SEED.map((n) => ({ ...n })),
   edges,
 };
+
+/** Restores campaigns / incident membership / graph nodes after mock merge/split mutations. */
+export function resetMutableFixtures() {
+  campaigns.splice(0, campaigns.length, ...cloneCampaigns(CAMPAIGNS_SEED));
+  for (const seed of INCIDENT_CAMPAIGN_SEED) {
+    const row = incidents.find((i) => i.id === seed.id);
+    if (!row) continue;
+    row.campaign_id = seed.campaign_id;
+    row.campaign_label = seed.campaign_label;
+    row.status = seed.status;
+    row.outcome = seed.outcome;
+  }
+  graph.nodes.splice(0, graph.nodes.length, ...GRAPH_NODES_SEED.map((n) => ({ ...n })));
+}
 
 const artifactsByKind: RunSummary["artifacts_by_kind"] = {
   har: { total: 4, parsed: 4, failed: 0 }, html: { total: 5, parsed: 5, failed: 0 }, image: { total: 4, parsed: 4, failed: 0 },
