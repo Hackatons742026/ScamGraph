@@ -8,7 +8,9 @@ app = main.app
 def test_health_and_unknown_api():
     client = TestClient(app)
     assert client.get("/api/health").json() == {"status": "ok", "version": "1"}
-    assert client.get("/api/missing").status_code == 404
+    missing = client.get("/api/missing")
+    assert missing.status_code == 404
+    assert missing.json() == {"error": "not_found", "detail": "Not found"}
 
 
 def test_spa_serves_assets_and_fallback_without_path_escape(tmp_path, monkeypatch):

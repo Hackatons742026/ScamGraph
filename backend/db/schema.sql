@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS evidence (
   ignore_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_value ON evidence(type, value_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_observation ON evidence(
+  incident_id, type, value_hash, COALESCE(artifact_id, ''), COALESCE(funnel_step, -1)
+);
 CREATE TABLE IF NOT EXISTS edges (
   id TEXT PRIMARY KEY, a_incident TEXT NOT NULL REFERENCES incidents(id),
   b_incident TEXT NOT NULL REFERENCES incidents(id), level TEXT NOT NULL, score REAL NOT NULL,

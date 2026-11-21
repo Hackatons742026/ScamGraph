@@ -78,7 +78,10 @@ class Repository:
         with self._connection() as db:
             db.executemany("""INSERT INTO evidence
                 (incident_id,artifact_id,type,family,tier,value_hash,display_value,weight,
-                 funnel_step,ignored,ignore_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)""", rows)
+                 funnel_step,ignored,ignore_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT DO UPDATE SET family=excluded.family,tier=excluded.tier,
+                display_value=excluded.display_value,weight=excluded.weight,
+                ignored=excluded.ignored,ignore_reason=excluded.ignore_reason""", rows)
 
     def get_evidence(self, incident_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:

@@ -26,6 +26,8 @@ def test_repository_round_trip_pipeline_models(tmp_path):
     repo.save_artifacts([artifact])
     evidence = Evidence("pixel_id", "A", None, "hash-only", "pixel-****", artifact_id=artifact.id)
     repo.save_evidence(incident.id, [evidence])
+    evidence.weight = 2.0
+    repo.save_evidence(incident.id, [evidence])
     media = MediaRef("media-1", artifact.id, "frame", "sha", path="media/sha.jpg")
     repo.save_media([media])
     repo.save_run("run-1", "done", "2026-01-01T00:00:00Z", summary={"incidents": 1})
@@ -36,6 +38,8 @@ def test_repository_round_trip_pipeline_models(tmp_path):
     assert repo.get_artifacts(incident.id)[0]["kind"] == "har"
     assert repo.get_artifacts(incident.id)[0]["role"] == "prelander"
     assert repo.get_evidence(incident.id)[0]["display_value"] == "pixel-****"
+    assert len(repo.get_evidence(incident.id)) == 1
+    assert repo.get_evidence(incident.id)[0]["weight"] == 2.0
     assert repo.get_media(media.id)["path"] == "media/sha.jpg"
     assert repo.get_run("run-1")["status"] == "done"
     assert repo.get_incident("' OR 1=1 --") is None

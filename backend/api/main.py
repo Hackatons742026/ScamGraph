@@ -2,11 +2,17 @@
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 
 app = FastAPI(title="ScamGraph DNA", version="1")
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+@app.exception_handler(HTTPException)
+def http_error(_request: Request, exc: HTTPException) -> JSONResponse:
+    error = "not_found" if exc.status_code == 404 else "http_error"
+    return JSONResponse(status_code=exc.status_code, content={"error": error, "detail": exc.detail})
 
 
 @app.get("/api/health")
