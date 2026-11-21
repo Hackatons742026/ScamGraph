@@ -46,3 +46,14 @@ def test_live_import_requires_configured_data_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("SCAMGRAPH_DATA_DIR", raising=False)
     response = client.post("/api/import", json={})
     assert response.status_code == 422 and response.json()["error"] == "validation_error"
+
+
+def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "live.db"))
+    monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("SCAMGRAPH_SALT", "synthetic-test-salt")
+    response = client.post("/api/classify", files={"text": (None, "synthetic note")})
+    assert response.status_code == 200 and response.json()["outcome"] in {
+        "known_campaign", "new_candidate", "needs_review"}
+    huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 10_000_001)})
+    assert huge.status_code == 413 and huge.json()["error"] == "http_error"

@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.db import Repository
 from backend.pipeline.run import run_on_data_dir
+from backend.pipeline.run import process_input
+from backend.pipeline.models import Evidence
+from backend.engine.linking import link_incidents
+from backend.engine.memory import classify, cluster_incidents
 
 from .schemas import *  # noqa: F403
 
@@ -22,6 +28,16 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     started = datetime.now(timezone.utc).isoformat()
     try:
         summary = run_on_data_dir(data_dir, db_path=repo.path)
+        grouped: dict[str, list[Evidence]] = {row["id"]: [] for row in repo.list_incidents()}
+        for row in repo.list_evidence():
+            grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"],
+                row["value_hash"], row["display_value"], row["weight"], row["artifact_id"],
+                row["funnel_step"], bool(row["ignored"]), row["ignore_reason"]))
+        edges = link_incidents(grouped)
+        clusters = cluster_incidents(grouped, edges)
+        repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns])
+        summary.update(campaigns=len(clusters.campaigns), networks=len(clusters.networks),
+                       unassigned=len(clusters.unassigned))
         repo.save_run(run_id, "done", started, finished_at=datetime.now(timezone.utc).isoformat(), summary=summary)
     except Exception as exc:  # background job boundary
         repo.save_run(run_id, "failed", started, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc)[:500])
@@ -102,3 +118,37 @@ def safe_media_path(row: dict) -> Path:
     if not path.is_file() or not any(path.is_relative_to(root) for root in roots):
         raise FileNotFoundError
     return path
+
+
+def classify_multipart(repo: Repository, body: bytes, content_type: str,
+                       exclude: str | None = None) -> tuple[object, object, list]:
+    if len(body) > 10_000_000: raise OverflowError
+    boundary = re.search(r"boundary=([^;]+)", content_type)
+    if not boundary: raise ValueError
+    text = url = None
+    with tempfile.TemporaryDirectory() as directory:
+        paths = []
+        for part in body.split(("--" + boundary.group(1).strip('"')).encode()):
+            if b"\r\n\r\n" not in part: continue
+            header, value = part.split(b"\r\n\r\n", 1); value = value.removesuffix(b"\r\n")
+            name = re.search(rb'name="([^"]+)"', header)
+            filename = re.search(rb'filename="([^"]*)"', header)
+            if filename and value:
+                safe = Path(filename.group(1).decode(errors="ignore")).name
+                if not safe or len(value) > 5_000_000: raise OverflowError
+                path = Path(directory) / safe; path.write_bytes(value); paths.append(path)
+            elif name and name.group(1) in {b"text", b"url"} and value.strip():
+                if name.group(1) == b"text": text = value.decode(errors="replace")
+                else: url = value.decode(errors="replace")
+        bundle = process_input(paths, text, url)
+    grouped: dict[str, list[Evidence]] = {row["id"]: [] for row in repo.list_incidents()}
+    for row in repo.list_evidence():
+        grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"],
+            row["value_hash"], row["display_value"], row["weight"], row["artifact_id"], row["funnel_step"]))
+    edges = link_incidents({**grouped, bundle.incident.id: bundle.evidence})
+    memory = cluster_incidents(grouped, [e for e in edges if bundle.incident.id not in {e.source, e.target}],
+                               exclude_incident=exclude)
+    candidate = [e for e in edges if bundle.incident.id in {e.source, e.target}]
+    result = classify(bundle.incident.id, candidate, memory,
+        coverage_ok=bool(bundle.coverage.kinds_present), exclude_incident=exclude)
+    return result, bundle, candidate

@@ -150,6 +150,23 @@ async def classify(_request: Request) -> ClassifyResult:
     values = re.findall(rb'name="(?:files|text|url)"[^\r\n]*\r\n(?:[^\r\n]*\r\n)*\r\n(.*?)(?=\r\n--)', body, re.DOTALL)
     if not content_type.startswith("multipart/form-data") or not any(value.strip() for value in values):
         raise HTTPException(422, "At least one file, text, or URL is required")
+    if repo := live.repository():
+        excluded = re.search(rb'name="exclude_incident"[^\r\n]*\r\n\r\n(.*?)(?=\r\n--)', body, re.DOTALL)
+        try: result, bundle, candidates = live.classify_multipart(repo, body, content_type,
+            excluded.group(1).decode() if excluded else None)
+        except OverflowError: raise HTTPException(413, "Upload exceeds the size limit")
+        except ValueError: raise HTTPException(422, "Invalid multipart body")
+        items = [EvidenceItem(id=f"candidate-{i}", type=e.type, tier=e.tier, family=e.family,
+            display=e.display, weight=e.weight, artifact_id=e.artifact_id or "",
+            funnel_step=e.funnel_step, ignored=e.ignored, ignore_reason=e.ignore_reason)
+            for i, e in enumerate(bundle.evidence)]
+        kind = "match" if result.outcome == "known_campaign" else "conflict" if result.outcome == "needs_review" else "weak"
+        return ClassifyResult(outcome=result.outcome, campaign_id=result.campaign_id,
+            campaign_label=result.campaign_id, reasons=[Reason(kind=kind, text=result.reasons[0], evidence=items)],
+            coverage=live.coverage(__import__("json").dumps(bundle.coverage.to_dict())), evidence=items,
+            candidate_edges=[Edge(id=f"candidate-{i}", source=e.source, target=e.target,
+                level=e.level, tier=e.tier, families=list(e.families), score=e.score,
+                comparable=e.comparable, low_confidence=e.low_confidence, evidence=[]) for i, e in enumerate(candidates)], elapsed_ms=0)
     reason = Reason(kind="match", text="Synthetic tier-A campaign match.", evidence=[seed.EVIDENCE])
     return ClassifyResult(outcome="known_campaign", campaign_id=seed.CAMPAIGN.id,
         campaign_label=seed.CAMPAIGN.label, reasons=[reason], coverage=seed.COVERAGE,
