@@ -12,7 +12,7 @@ import { EvidenceList } from "@/features/incident/EvidenceList";
 
 async function fetchIncident(id: string): Promise<IncidentDetailType | null> {
   try {
-    return await unwrap(api.GET("/api/incidents/{id}", { params: { path: { id } } }));
+    return await unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: id } } }));
   } catch (err) {
     if (err instanceof ApiRequestError && err.status === 404) return null;
     throw err;

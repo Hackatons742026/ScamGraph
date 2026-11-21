@@ -59,7 +59,7 @@ describe("unwrap", () => {
     const api = clientReturning(
       () => new Response(JSON.stringify({ error: "not_found", detail: "Campaign not found" }), { status: 404, headers: { "Content-Type": "application/json" } }),
     );
-    const err = await unwrap(api.GET("/api/campaigns/{id}", { params: { path: { id: "camp_missing" } } })).catch((e: unknown) => e);
+    const err = await unwrap(api.GET("/api/campaigns/{campaign_id}", { params: { path: { campaign_id: "camp_missing" } } })).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiRequestError);
     expect(err).toMatchObject({ status: 404, code: "not_found", message: "Campaign not found" });
   });

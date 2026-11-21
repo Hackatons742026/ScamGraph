@@ -17,7 +17,7 @@ function parseVariant(status: ArtifactSummary["parse_status"]) {
 function ArtifactDetailPanel({ id }: { id: string }) {
   const detail = useQuery({
     queryKey: ["artifacts", id],
-    queryFn: () => unwrap(api.GET("/api/artifacts/{id}", { params: { path: { id } } })),
+    queryFn: () => unwrap(api.GET("/api/artifacts/{artifact_id}", { params: { path: { artifact_id: id } } })),
   });
 
   return (

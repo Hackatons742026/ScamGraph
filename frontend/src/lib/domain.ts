@@ -51,8 +51,8 @@ const IGNORE_REASON: Record<string, string> = {
   other: "Ignored by rule",
 };
 
-/** Human label for EvidenceItem.ignore_reason; unknown future reasons fall back to a generic label. */
-export function ignoreReasonLabel(reason: string | null): string | null {
+/** Human label for EvidenceItem.ignore_reason (optional in the live OpenAPI); unknown future reasons fall back to a generic label. */
+export function ignoreReasonLabel(reason: string | null | undefined): string | null {
   if (!reason) return null;
   return IGNORE_REASON[reason] ?? "Ignored by rule";
 }
