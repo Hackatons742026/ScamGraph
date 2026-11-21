@@ -23,6 +23,12 @@ describe("unwrap", () => {
     expect(err).toMatchObject({ status: 404, code: "not_found", message: "Incident not found" });
   });
 
+  it("reads FastAPI's default validation body ({detail: [{msg}]}) instead of showing [object Object]", async () => {
+    const body = { detail: [{ loc: ["body", "files"], msg: "Field required", type: "missing" }, { msg: "Too large" }] };
+    await expect(unwrap(result(422, { error: body }))).rejects.toMatchObject({ status: 422, code: "validation_error", message: "Field required; Too large" });
+    await expect(unwrap(result(500, { error: { detail: { nested: true } } }))).rejects.toMatchObject({ message: "Request failed with status 500", code: "unknown_error" });
+  });
+
   it("treats a 2xx with an empty body (e.g. 204) as success, not an error", async () => {
     await expect(unwrap(result(204, {}))).resolves.toBeUndefined();
   });

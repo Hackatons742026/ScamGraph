@@ -29,10 +29,17 @@ export const STATUS: Record<IncidentStatus, string> = {
   new_candidate: "New Candidate",
 };
 
-export const IGNORE_REASON: Record<string, string> = {
+const IGNORE_REASON: Record<string, string> = {
   cdn_ip: "CDN / shared-hosting IP",
   public_lib: "Public library",
   placeholder_phone: "Placeholder phone number",
   small_doc: "Helper document < 5 KB",
   high_df: "Too common (> 30% of incidents)",
+  other: "Ignored by rule",
 };
+
+/** Human label for EvidenceItem.ignore_reason; unknown future reasons fall back to a generic label. */
+export function ignoreReasonLabel(reason: string | null): string | null {
+  if (!reason) return null;
+  return IGNORE_REASON[reason] ?? "Ignored by rule";
+}

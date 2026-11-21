@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { incidents } from "@/mocks/data";
 import { renderApp } from "@/test/render";
 
 describe("app shell (mock mode)", () => {
@@ -9,7 +10,7 @@ describe("app shell (mock mode)", () => {
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(within(nav).getAllByRole("link")).toHaveLength(7);
     expect(screen.getByRole("note")).toHaveTextContent(/synthetic data only/i);
-    expect(await screen.findByText(/6 incidents/)).toBeInTheDocument();
+    expect(await screen.findByText(new RegExp(`${incidents.length} incidents`))).toBeInTheDocument();
   });
 
   it.each([

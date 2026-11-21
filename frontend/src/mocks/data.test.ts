@@ -35,7 +35,7 @@ const sourceLiterals = [...source.matchAll(/"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\
 
 // Hostname-shaped tokens. File names (capture.har, ad.info.json, ...) are excluded by extension below.
 const HOST = /(?<![\w.@/-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9](?![\w-])/gi;
-const FILE_EXT = new Set(["har", "html", "htm", "mhtml", "json", "png", "jpg", "jpeg", "webp", "gif", "mp4", "webm", "mov", "bin", "txt", "zip", "ts", "tsx"]);
+const FILE_EXT = new Set(["har", "html", "htm", "mhtml", "json", "png", "jpg", "jpeg", "webp", "gif", "mp4", "webm", "bin", "txt", "ts", "tsx"]);
 
 function domainsIn(text: string): string[] {
   const hosts = [...text.matchAll(HOST)].map((m) => m[0].toLowerCase());

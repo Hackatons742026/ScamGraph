@@ -51,6 +51,7 @@ export const incidents: IncidentSummary[] = [
   inc({ id: "inc_beta_2", label: "Synthetic incident Beta-2", status: "in_campaign", artifact_count: 5, campaign_id: "camp_beta", campaign_label: "Synthetic Campaign Beta", network_id: "net_kit", outcome: "known_campaign", reason_summary: "Two tier-B families (creative + domain) shared with Beta-1." }),
   inc({ id: "inc_gamma", label: "Synthetic incident Gamma", status: "new_candidate", outcome: "new_candidate", reason_summary: "Enough coverage, but no campaign-level link." }),
   inc({ id: "inc_delta", label: "Synthetic incident Delta", status: "needs_review", artifact_count: 2, coverage: cov(["video", "adlib_json"], ["no HAR", "video only"]), outcome: "needs_review", reason_summary: "Only one comparable evidence type." }),
+  inc({ id: "inc_epsilon", label: "Synthetic incident Epsilon", status: "unassigned", artifact_count: 2, coverage: cov(["html", "image"], ["no HAR"]), reason_summary: "No campaign-level evidence; kept unassigned." }),
 ];
 
 const edge = (id: string, source: string, target: string, p: Partial<Edge> & Pick<Edge, "level" | "tier" | "evidence">): Edge => ({
@@ -153,27 +154,51 @@ export const graph: GraphResponse = {
   edges,
 };
 
+const artifactsByKind: RunSummary["artifacts_by_kind"] = {
+  har: { total: 4, parsed: 4, failed: 0 }, html: { total: 5, parsed: 5, failed: 0 }, image: { total: 4, parsed: 4, failed: 0 },
+  video: { total: 1, parsed: 1, failed: 0 }, adlib_json: { total: 1, parsed: 1, failed: 0 }, unknown: { total: 1, parsed: 0, failed: 1 },
+};
+const totalArtifacts = Object.values(artifactsByKind).reduce((n, k) => n + k.total, 0);
+const countStatus = (s: IncidentSummary["status"]) => incidents.filter((i) => i.status === s).length;
+
+// Counts are derived from the fixtures so every screen shows the same numbers.
 export const latestRun: RunSummary = {
   id: "run_mock_001", status: "done", started_at: "2026-11-21T15:00:00Z", finished_at: "2026-11-21T15:00:42Z",
-  incidents: incidents.length, artifacts: 14,
-  artifacts_by_kind: { har: { total: 4, parsed: 4, failed: 0 }, html: { total: 4, parsed: 4, failed: 0 }, image: { total: 3, parsed: 3, failed: 0 }, video: { total: 1, parsed: 1, failed: 0 }, adlib_json: { total: 1, parsed: 1, failed: 0 }, unknown: { total: 1, parsed: 0, failed: 1 } },
-  unique_artifacts: 13, duplicates: 1, campaigns: 2, networks: 1, unassigned: 2, needs_review: 1, new_candidates: 1,
+  incidents: incidents.length, artifacts: totalArtifacts, artifacts_by_kind: artifactsByKind,
+  unique_artifacts: totalArtifacts - 1, duplicates: 1,
+  campaigns: campaigns.filter((c) => c.level === "campaign").length, networks: campaigns.filter((c) => c.level === "network").length,
+  unassigned: incidents.filter((i) => !i.campaign_id).length, needs_review: countStatus("needs_review"), new_candidates: countStatus("new_candidate"),
   secrets_redacted: 9, error: null,
 };
 
-const metrics = (precision: number, recall: number) => ({ precision, recall, f1: (2 * precision * recall) / (precision + recall), tp: 4, fp: 0, fn: 1 });
+const metrics = (tp: number, fp: number, fn: number) => {
+  const precision = tp / (tp + fp);
+  const recall = tp / (tp + fn);
+  return { precision, recall, f1: (2 * precision * recall) / (precision + recall), tp, fp, fn };
+};
+
+const OUTCOMES = ["known_campaign", "new_candidate", "needs_review"] as const;
+const looRows = incidents.map((i) => {
+  const expected = i.outcome ?? "needs_review";
+  // One deliberate synthetic miss so the confusion matrix shows an error cell.
+  const predicted = i.status === "new_candidate" ? "needs_review" : expected;
+  return { incident_id: i.id, expected, predicted, correct: expected === predicted };
+});
 
 export const evalReport: EvalReport = {
   generated_at: "2026-11-21T15:05:00Z",
   scenarios: ["Exact duplicates", "Modified versions", "Known campaigns", "Correct non-merging", "New material", "Missing metadata", "Different formats"].map((name, i) => ({
     id: (i + 1) as EvalReport["scenarios"][number]["id"], name, criterion: "Synthetic criterion", passed: i !== 5, details: i === 5 ? "Synthetic failure detail" : "Synthetic pass",
   })),
-  pairs: { n_pairs: 15, mentor_verified: 5, agreement: 0.8, campaign: metrics(1, 0.8), network: metrics(0.75, 1) },
+  pairs: { n_pairs: 15, mentor_verified: 5, agreement: 0.8, campaign: metrics(4, 0, 1), network: metrics(3, 1, 0) },
   false_merges: 0,
   loo: {
-    accuracy: 5 / 6,
-    rows: incidents.map((i, n) => ({ incident_id: i.id, expected: i.outcome ?? "needs_review", predicted: n === 4 ? "needs_review" : (i.outcome ?? "needs_review"), correct: n !== 4 })),
-    confusion: { labels: ["known_campaign", "new_candidate", "needs_review"], matrix: [[4, 0, 0], [0, 0, 1], [0, 0, 1]] },
+    accuracy: looRows.filter((r) => r.correct).length / looRows.length,
+    rows: looRows,
+    confusion: {
+      labels: [...OUTCOMES],
+      matrix: OUTCOMES.map((exp) => OUTCOMES.map((pred) => looRows.filter((r) => r.expected === exp && r.predicted === pred).length)),
+    },
   },
   ablation: [
     { config: "Content only", campaign_p: 0.5, campaign_r: 0.5, false_merges: 2, loo_routing: 0.5 },

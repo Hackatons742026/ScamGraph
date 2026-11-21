@@ -36,7 +36,8 @@ async function classify(req: Request): Promise<ClassifyResult> {
     campaign_id: outcome === "known_campaign" ? (left?.campaign_id ?? null) : null,
     campaign_label: outcome === "known_campaign" ? (left?.campaign_label ?? null) : null,
     reasons: [{ kind: outcome === "needs_review" ? "coverage" : outcome === "known_campaign" ? "match" : "weak", text: reasonText[outcome], evidence: outcome === "known_campaign" ? [db.evidence.pixel] : [] }],
-    coverage: left?.coverage ?? db.incidents.find((i) => i.id === "inc_delta")!.coverage,
+    // Low coverage only for needs_review; a new candidate needs enough comparable evidence by definition.
+    coverage: left?.coverage ?? db.incidents.find((i) => i.status === outcome)!.coverage,
     evidence: outcome === "known_campaign" ? [db.evidence.pixel, db.evidence.sentence] : [],
     candidate_edges: outcome === "known_campaign" ? db.edges.slice(0, 1) : [],
     elapsed_ms: 84,

@@ -17,7 +17,8 @@ export function TierBadge({ tier }: { tier: Tier }) {
   );
 }
 
-export function FamilyLabel({ family }: { family: Family }) {
+// `Family | null`: tolerant of both the snapshot (nullable enum) and Pydantic's anyOf-null output.
+export function FamilyLabel({ family }: { family: Family | null }) {
   if (!family) return null;
   const f = FAMILY[family];
   return (
