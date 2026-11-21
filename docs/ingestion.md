@@ -48,11 +48,14 @@ Used by `POST /api/classify` (co-5).
 | `SCAMGRAPH_SALT` | yes | — | Salted hashes for secrets / IDs |
 | `SCAMGRAPH_DATA_DIR` | for CLI | `data/raw` | Dataset root |
 | `SCAMGRAPH_DB` | for persist | `data/scamgraph.db` | SQLite path |
-| `SCAMGRAPH_CACHE_DIR` | no | `data/cache` | Frames / screenshots (`media/<sha256>.*`) |
+| `SCAMGRAPH_CACHE_DIR` | no | `data/cache` | Frames / screenshots (`media/<sha256>.*`); whisper cache under `whisper/` |
+| `SCAMGRAPH_ASR` | no | `1` | Set `0` to disable optional speech-to-text |
+| `SCAMGRAPH_ASR_TIMEOUT` | no | `120` | Soft timeout (seconds) for whisper inference |
+| `SCAMGRAPH_ASR_MAX_BYTES` | no | `52428800` | Skip ASR when media exceeds this size |
 
-System tools: `ffmpeg` (video frames), `tesseract` + `tesseract-ocr-pol` (OCR). Missing tools soft-fail (`PARTIAL` / empty OCR).
+System tools: `ffmpeg` (video frames + ASR audio extract), `tesseract` + `tesseract-ocr-pol` (OCR). Missing tools soft-fail (`PARTIAL` / empty OCR / empty ASR).
 
-Optional heavy deps: `backend/requirements-optional.txt` (EasyOCR, faster-whisper).
+Optional heavy deps: `backend/requirements-optional.txt` (EasyOCR, faster-whisper). ASR uses faster-whisper **small**, offline (`local_files_only`); missing package/model never fails the run — empty transcript, no crash. Transcript sentences (≥10 words, same gate as OCR/HTML extractors) become tier-C `shared_sentence` evidence.
 
 ## Safety
 

@@ -14,8 +14,12 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from backend.pipeline.asr import transcribe_audio
 from backend.pipeline.dedup import dedupe_artifacts, dedupe_media
-from backend.pipeline.extract import ExtractInput, extract_all
+from backend.pipeline.extract import ExtractInput, coverage_for, dedupe_evidence, extract_all
+from backend.pipeline.extract.builders import make_evidence
+from backend.pipeline.extract.extractors import _SENTENCE_RE
+from backend.pipeline.extract.normalize import norm_text_sentence
 from backend.pipeline.intake.adlib import parse_adlib
 from backend.pipeline.intake.bundle import parse_bundle
 from backend.pipeline.intake.discover import discover_incidents
@@ -27,6 +31,8 @@ from backend.pipeline.intake.mhtml import parse_mhtml
 from backend.pipeline.models import (
     Artifact,
     ArtifactKind,
+    Evidence,
+    EvidenceTier,
     Incident,
     IncidentBundle,
     MediaRef,
@@ -198,6 +204,7 @@ def _parse_incident(incident: Incident) -> dict:
     adlib_map: dict = {}
     media_pairs: list[tuple[Artifact, MediaRef]] = []
     html_for_funnel: dict = {}
+    asr_transcripts: list[tuple[Artifact, str]] = []
 
     for art in artifacts:
         kind = art.kind.value if isinstance(art.kind, ArtifactKind) else str(art.kind)
@@ -240,6 +247,15 @@ def _parse_incident(incident: Incident) -> dict:
                 else:
                     art.parse_status = ParseStatus.PARTIAL
                     art.error = result.error
+                # Optional ASR — soft-fail; must not flip video parse_status to FAILED.
+                try:
+                    asr = transcribe_audio(art.path)
+                    if asr.text.strip():
+                        asr_transcripts.append((art, asr.text.strip()))
+                    elif asr.error:
+                        logger.info("ASR soft-fail %s: %s", art.id, asr.error)
+                except Exception as asr_exc:  # noqa: BLE001 — belt-and-suspenders
+                    logger.info("ASR soft-fail %s: %s", art.id, asr_exc)
             elif kind == ArtifactKind.ADLIB_JSON.value:
                 result = parse_adlib(art.path)
                 art.parser, art.parse_status, art.error = "adlib", result.parse_status, result.error
@@ -262,6 +278,7 @@ def _parse_incident(incident: Incident) -> dict:
     for art in artifacts:
         art.role = role_by_id.get(art.id, art.role)
 
+    salt = require_salt()
     extracted = extract_all(
         ExtractInput(
             incident_id=incident.id,
@@ -270,18 +287,55 @@ def _parse_incident(incident: Incident) -> dict:
             html=html_map,
             adlib=adlib_map,
             media=media_pairs,
-        )
+        ),
+        salt=salt,
+    )
+    evidence = list(extracted.evidence)
+    for art, transcript in asr_transcripts:
+        evidence.extend(_evidence_from_transcript(transcript, artifact=art, salt=salt))
+    if asr_transcripts:
+        evidence = dedupe_evidence(evidence)
+    coverage = (
+        coverage_for(artifacts, evidence) if asr_transcripts else extracted.coverage
     )
     media = dedupe_media([m for _, m in media_pairs])
     incident.artifacts = artifacts
-    incident.coverage = extracted.coverage
+    incident.coverage = coverage
     return {
         "incident": incident,
         "artifacts": artifacts,
-        "evidence": extracted.evidence,
-        "coverage": extracted.coverage,
+        "evidence": evidence,
+        "coverage": coverage,
         "media": media,
     }
+
+
+def _evidence_from_transcript(
+    text: str,
+    *,
+    artifact: Artifact,
+    salt: str,
+) -> list[Evidence]:
+    """Tier-C ``shared_sentence`` per sentence (≥10 words), same gate as extractors."""
+    out: list[Evidence] = []
+    for sentence in _SENTENCE_RE.findall(text):
+        words = sentence.split()
+        if len(words) < 10:
+            continue
+        normed = norm_text_sentence(sentence)
+        out.append(
+            make_evidence(
+                type="shared_sentence",
+                tier=EvidenceTier.C,
+                family=None,
+                raw_value=normed,
+                display=" ".join(words[:12]) + ("…" if len(words) > 12 else ""),
+                artifact_id=artifact.id,
+                funnel_step=artifact.funnel_step,
+                salt=salt,
+            )
+        )
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:

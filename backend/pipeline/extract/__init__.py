@@ -111,7 +111,8 @@ def coverage_for(artifacts: list[Artifact], evidence: list[Evidence]) -> Coverag
     )
 
 
-def _dedupe_evidence(rows: list[Evidence]) -> list[Evidence]:
+def dedupe_evidence(rows: list[Evidence]) -> list[Evidence]:
+    """Collapse duplicate (type, value_hash, artifact_id) evidence rows."""
     seen: set[tuple[str, str, str | None]] = set()
     out: list[Evidence] = []
     for row in rows:
@@ -121,3 +122,7 @@ def _dedupe_evidence(rows: list[Evidence]) -> list[Evidence]:
         seen.add(key)
         out.append(row)
     return out
+
+
+# Backward-compatible alias used inside extract_all.
+_dedupe_evidence = dedupe_evidence
