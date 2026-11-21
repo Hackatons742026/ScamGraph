@@ -18,5 +18,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: false,
     env: { VITE_USE_MOCKS: "true" },
+    // Node --test scripts under scripts/ (e.g. openapi-equal) are not Vitest suites.
+    exclude: ["**/node_modules/**", "**/dist/**", "scripts/**"],
   },
 });

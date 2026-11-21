@@ -3,6 +3,8 @@
 // built app and a few demo-quality warnings.
 // Usage: npm run smoke:live   (API_URL defaults to http://localhost:8000). Prints routes, shapes and counts, never values.
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { deepEqualJson } from "./openapi-equal.mjs";
 
 const base = process.env.API_URL ?? "http://localhost:8000";
 const snapshotText = readFileSync(new URL("../openapi.snapshot.json", import.meta.url), "utf8");
@@ -73,7 +75,10 @@ async function main() {
     process.exit(2);
   }
   const live = await fetch(`${base}/openapi.json`).then((r) => r.json());
-  if (JSON.stringify(live) !== JSON.stringify(spec)) failures.push("openapi.snapshot.json differs from the live /openapi.json: run npm run gen:api:live");
+  // Compare structure/values only — FastAPI may reorder object keys vs the committed snapshot.
+  if (!deepEqualJson(live, spec)) {
+    failures.push("openapi.snapshot.json differs from the live /openapi.json (structural): run npm run gen:api:live");
+  }
 
   const enc = encodeURIComponent;
   await get("/api/health");
@@ -114,4 +119,7 @@ async function main() {
   process.exit(failures.length ? 1 : 0);
 }
 
-await main();
+// Only hit the network when run as `npm run smoke:live`, not when unit-tested via import.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}
