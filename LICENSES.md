@@ -35,6 +35,8 @@ The frontend manifest lists these direct runtime dependencies. License metadata 
 | `clsx` | MIT | [npm](https://www.npmjs.com/package/clsx) |
 | `class-variance-authority` | Apache-2.0 | [npm](https://www.npmjs.com/package/class-variance-authority) |
 | `lucide-react` | ISC | [npm](https://www.npmjs.com/package/lucide-react) |
+| `cytoscape` | MIT | [npm](https://www.npmjs.com/package/cytoscape) |
+| `cytoscape-fcose` | MIT | [npm](https://www.npmjs.com/package/cytoscape-fcose) |
 
 ## External tools and model assets
 

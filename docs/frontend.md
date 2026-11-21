@@ -84,3 +84,16 @@ src/pages/        one component per route (routes in src/routes.tsx)
 - Component tests run in jsdom (`src/test/render.tsx` renders the full app at a route).
 - Tests that send multipart bodies run in the Node environment (`// @vitest-environment node`).
   jsdom's `File`/`FormData` can't be serialised by Node's native `Request`.
+
+## Screens
+
+| Route | Screen | What it shows |
+|---|---|---|
+| `/` | Overview | Latest run: counts of incidents, artifacts, campaigns, networks, unassigned, Needs Review and new candidates, plus artifact coverage by kind. **Run import** shows the import's progress. Before the first import, an empty state explains what to do. |
+| `/incidents` | Incidents | Every incident with its status, coverage badges, artifact count, last seen and campaign. Status, coverage and campaign filters are kept in the URL. |
+| `/incidents/:id` | Incident detail | Decision card (outcome and reasons), coverage, evidence grouped by tier and family (masked value, source artifact, funnel step), artifacts with parse status and media, and links to other incidents. |
+| `/campaigns` | Campaigns | Campaigns and networks by size, with first/last seen and the strongest evidence. Each row opens the graph focused on that group. |
+| `/graph` | Investigation graph | Cytoscape (fcose) graph with campaign, network and Unassigned groups. Edge style follows tier (A thick, B coloured by family, C dashed, low confidence greyed), and the legend is always shown. Tier and level filters are applied by the API. A link opens an evidence panel. The table view lists every link and every incident and works by keyboard. `?campaign=` focuses on one group. |
+| `/classify` | Classify | Upload files, paste text or give a URL, with optional leave-one-out. Result: Known Campaign, New Campaign Candidate or Needs Review, with reasons, coverage and candidate links. |
+| `/review` | Review queue | Incidents that are Needs Review or unassigned, with the reason for each. |
+| `/evaluation` | Evaluation | The seven validation scenarios with pass/fail, campaign- and network-level pair precision/recall/F1, false merges, leave-one-out routing (accuracy, confusion matrix, per-incident rows) and ablation. Only measured values are shown. A report without `generated_at` is marked as synthetic. Without labelled pairs, the metrics read "not measured" rather than 0%. An empty report gets an empty state. |
