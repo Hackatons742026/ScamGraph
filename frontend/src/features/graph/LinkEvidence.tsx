@@ -1,8 +1,8 @@
-import type { EvidenceItem } from "@/api/types";
+import type { EvidenceItem, Tier } from "@/api/types";
 import { FamilyLabel, TierBadge } from "@/components/domain/badges";
 import { humanize, ignoreReasonLabel } from "@/lib/domain";
 
-const TIER_ORDER = { A: 0, B: 1, C: 2 } as const;
+const TIER_ORDER: Record<Tier, number> = { A: 0, B: 1, C: 2 };
 
 /** Evidence behind one link, strongest first: tier, type, masked value, family, source artifact and funnel step. */
 export function LinkEvidence({ evidence }: { evidence: EvidenceItem[] }) {

@@ -92,7 +92,9 @@ const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus
     let nodes = db.graph.nodes;
     if (campaign) {
       // Focus: the campaign/network, its member incidents and child groups, plus its parent network.
-      const focus = orNotFound(nodes.find((n) => n.id === campaign), "Campaign");
+      // Unknown focus → empty graph (200), as the backend does.
+      const focus = nodes.find((n) => n.id === campaign);
+      if (!focus) return { nodes: [], edges: [] };
       const children = nodes.filter((n) => n.parent === campaign);
       const members = nodes.filter((n) => n.parent === campaign || children.some((c) => c.id === n.parent));
       const keep = new Set([focus.id, ...(focus.parent ? [focus.parent] : []), ...children.map((n) => n.id), ...members.map((n) => n.id)]);

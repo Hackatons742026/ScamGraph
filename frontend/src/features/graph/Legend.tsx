@@ -1,8 +1,9 @@
+import type { Tier } from "@/api/types";
 import { FAMILY, TIER } from "@/lib/domain";
 import { edgeVisual } from "./elements";
 
-function Line({ tier, family, low }: { tier: "A" | "B" | "C"; family?: string; low?: boolean }) {
-  const v = edgeVisual({ tier, families: family ? [family] : [], low_confidence: !!low });
+function Line({ tier, families = [], low }: { tier: Tier; families?: string[]; low?: boolean }) {
+  const v = edgeVisual({ tier, families, low_confidence: !!low });
   return (
     <svg width="36" height="10" aria-hidden className="shrink-0">
       <line x1="2" y1="5" x2="34" y2="5" stroke={v.color} strokeWidth={v.width} strokeDasharray={v.lineStyle === "dashed" ? "5 4" : undefined} strokeLinecap="round" opacity={v.opacity} />
@@ -22,6 +23,7 @@ export function Legend() {
           {Object.entries(FAMILY).map(([k, f]) => (
             <span key={k} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: f.color }} />{f.label}</span>
           ))}
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: TIER.B.color }} />Several families</span>
         </div>
       </div>
       <div className="flex items-center gap-2"><Line tier="C" /> Tier C: weak content signal (dashed)</div>

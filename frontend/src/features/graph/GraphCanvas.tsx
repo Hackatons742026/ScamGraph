@@ -1,6 +1,6 @@
 import cytoscape, { type Core } from "cytoscape";
 import fcose from "cytoscape-fcose";
-import { useEffect, useRef } from "react";
+import { Component, type ReactNode, useEffect, useRef } from "react";
 import type { GraphResponse } from "@/api/types";
 import { stylesheet, toElements } from "./elements";
 
@@ -13,8 +13,26 @@ type Props = {
   onOpenIncident: (id: string) => void;
 };
 
-/** Interactive Cytoscape view (fcose layout). The table view next to it offers the same selection without a mouse. */
-export function GraphCanvas({ graph, selectedEdgeId, onSelectEdge, onOpenIncident }: Props) {
+/** If Cytoscape rejects the data, keep the page (legend, link table) usable instead of crashing the app. */
+class CanvasBoundary extends Component<{ resetKey: unknown; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidUpdate(prev: { resetKey: unknown }) {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false });
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        The graph could not be drawn from this data. The link table below still lists every link.
+      </p>
+    );
+  }
+}
+
+function CytoscapeView({ graph, selectedEdgeId, onSelectEdge, onOpenIncident }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const cy = useRef<Core | null>(null);
   const handlers = useRef({ onSelectEdge, onOpenIncident });
@@ -28,11 +46,12 @@ export function GraphCanvas({ graph, selectedEdgeId, onSelectEdge, onOpenInciden
       cytoscape.use(fcose);
       registered = true;
     }
+    // fcose randomizes initial positions by default; a fresh instance has none, so never pass randomize: false.
     const instance = cytoscape({
       container: container.current,
       elements: toElements(graph),
       style: stylesheet,
-      layout: { name: "fcose", animate: false, randomize: false, nodeRepulsion: 9000, idealEdgeLength: 90 } as cytoscape.LayoutOptions,
+      layout: { name: "fcose", animate: false, nodeRepulsion: 9000, idealEdgeLength: 90 } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.3,
     });
     instance.on("tap", "edge", (e) => handlers.current.onSelectEdge(e.target.id()));
@@ -52,4 +71,13 @@ export function GraphCanvas({ graph, selectedEdgeId, onSelectEdge, onOpenInciden
   }, [selectedEdgeId, graph]);
 
   return <div ref={container} data-testid="graph-canvas" aria-label="Investigation graph" role="img" className="h-[520px] w-full rounded-lg border border-slate-200 bg-white" />;
+}
+
+/** Interactive Cytoscape view (fcose layout). The link table offers the same selection and incident links without a mouse. */
+export function GraphCanvas(props: Props) {
+  return (
+    <CanvasBoundary resetKey={props.graph}>
+      <CytoscapeView {...props} />
+    </CanvasBoundary>
+  );
 }
