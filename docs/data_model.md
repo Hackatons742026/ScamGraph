@@ -29,7 +29,7 @@ Ingestion persists **only** through `backend.db.Repository` — never raw SQL.
 | `evidence` | yes | Only `display_value` / hashes — never raw secrets |
 | `media` | yes | `path` relative to `SCAMGRAPH_CACHE_DIR` |
 | `pages` / `requests` | no (reserved) | Optional finer HAR/page rows for later |
-| `edges` / `campaigns` / `membership` / `decisions` | no | Engine / live API |
+| `edges` / `campaigns` / `membership` / `decisions` | yes | Live import rebuilds derived engine state and persists leave-one-out decisions |
 | `audit_log` | no | API / overrides |
 
 ## Evidence conventions

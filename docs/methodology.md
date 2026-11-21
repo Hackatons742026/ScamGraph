@@ -68,8 +68,9 @@ endpoints → `order`. `strona_N` order is fallback only.
 - Classify: `process_input(paths, text, url) -> IncidentBundle` with **no** DB
   writes (used by live API classify).
 
-Target: full NASK sample under **2 minutes** on a laptop; missing OCR/ffmpeg
-soft-fails without aborting the run.
+Performance goal: process the full authorized sample under **2 minutes** on the
+demo laptop. This remains a measurement requirement; synthetic CI runs do not
+establish it. Missing OCR/ffmpeg soft-fails without aborting the run.
 
 ## What ingestion does not decide
 

@@ -1,9 +1,11 @@
 # Similarity and incident linking
 
 ScamGraph links incidents only through shared, non-ignored evidence. Candidate
-pairs come from an inverted index of `(type, value_hash)`, so absent evidence is
-never treated as disagreement. Each edge records the number of evidence types
-available in both incidents; fewer than two makes the edge low-confidence.
+pairs come from an inverted index of `(type, value_hash)`: only observed shared
+values create a candidate edge. An absent artifact or value is unknown, never a
+disagreement. `comparable` counts evidence types available for that pair; an
+edge with fewer than two comparable types is marked low-confidence. Incidents
+with no shared evidence have no edge.
 
 ## Rules
 
@@ -19,6 +21,8 @@ available in both incidents; fewer than two makes the edge low-confidence.
   incidents are excluded.
 
 Every retained value receives inverse-document-frequency weight
-`log(N / df)`. Edge scores are sums of these weights, not fraud probabilities.
+`log(N / df)`, where `N` is the incident count and `df` is the count of
+incidents containing that value. Edge scores sum the retained weights and are
+not calibrated probabilities or fraud scores.
 Matched evidence preserves masked display text, source artifact IDs, funnel
 steps, and a safe explanation. No raw identifier is returned.
