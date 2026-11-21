@@ -8,6 +8,14 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 
+from backend.exports import (
+    ExportNotFound,
+    campaign_export_projection,
+    render_csv,
+    render_html,
+    render_misp,
+)
+
 from . import seed
 from . import live
 from .schemas import *  # noqa: F403
@@ -187,5 +195,36 @@ def evaluation() -> EvalReport:
 @router.post("/campaigns/split", status_code=status.HTTP_501_NOT_IMPLEMENTED)
 def optional_mutation() -> None: raise HTTPException(501, "Optional endpoint not enabled")
 
-@router.get("/exports/{name}", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-def optional_export(name: str) -> None: raise HTTPException(501, "Optional exporter not enabled")
+@router.get("/exports/{name}")
+def export_campaign(name: str) -> Response:
+    if name.endswith(".misp.json"):
+        campaign_id, extension = name[:-10], "misp.json"
+    elif name.endswith(".csv"):
+        campaign_id, extension = name[:-4], "csv"
+    elif name.endswith(".html"):
+        campaign_id, extension = name[:-5], "html"
+    else:
+        raise HTTPException(404, "Export not found")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", campaign_id):
+        raise HTTPException(404, "Export not found")
+    repo = live.repository()
+    if repo is None:
+        raise HTTPException(501, "Exports require a configured live database")
+    try:
+        projection = campaign_export_projection(repo, campaign_id)
+    except ExportNotFound:
+        raise HTTPException(404, "Campaign not found") from None
+    except RuntimeError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+    renderers = {"html": (render_html, "text/html; charset=utf-8"),
+                 "csv": (render_csv, "text/csv; charset=utf-8"),
+                 "misp.json": (render_misp, "application/json")}
+    renderer, media_type = renderers[extension]
+    content = renderer(projection)
+    filename = f"scamgraph-{projection['campaign_ref']}.{extension}"
+    return Response(content, media_type=media_type, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+    })

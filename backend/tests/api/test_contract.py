@@ -54,7 +54,7 @@ def test_mutations_media_and_contract_errors():
                  "/api/campaigns/missing", "/api/media/missing"):
         contract_error(client.get(path), 404, "not_found")
     for method, path in (("post", "/api/edges/x/decision"), ("post", "/api/campaigns/merge"),
-                         ("post", "/api/campaigns/split"), ("get", "/api/exports/report")):
+                         ("post", "/api/campaigns/split"), ("get", "/api/exports/camp_demo.csv")):
         contract_error(getattr(client, method)(path), 501, "http_error")
 
 
