@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api", responses=ERRORS)
 @router.post("/import", response_model=ImportAccepted, status_code=202)
 def start_import(background: BackgroundTasks, _request: ImportRequest | None = None) -> ImportAccepted:
     if repo := live.repository():
-        data_dir = (_request.path if _request else None) or os.environ.get("SCAMGRAPH_DATA_DIR")
+        data_dir = os.environ.get("SCAMGRAPH_DATA_DIR")
         if not data_dir: raise HTTPException(422, "SCAMGRAPH_DATA_DIR is not configured")
         run_id = f"run_{uuid.uuid4().hex[:12]}"
         repo.save_run(run_id, "pending", datetime.now(timezone.utc).isoformat())
@@ -29,7 +29,9 @@ def start_import(background: BackgroundTasks, _request: ImportRequest | None = N
 
 @router.get("/runs/latest", response_model=RunSummary)
 def latest_run() -> RunSummary:
-    if (repo := live.repository()) and (row := repo.latest_run()): return live.run(row)
+    if repo := live.repository():
+        if row := repo.latest_run(): return live.run(row)
+        raise HTTPException(404, "Run not found")
     return seed.RUN
 
 @router.get("/runs/{run_id}", response_model=RunSummary)

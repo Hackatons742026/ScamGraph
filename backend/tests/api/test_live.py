@@ -29,21 +29,27 @@ def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     repo.save_media([MediaRef("media-a", "art-inc-a", "frame", "sha", path=str(media_path))])
     edge = LinkEdge("inc-a", "inc-b", "campaign", "A", (), 1.0, 2, False, ())
     campaign = Campaign("campaign-inc-a", "campaign", ("inc-a", "inc-b"), (), ())
-    repo.save_analysis([edge], [campaign])
+    network = Campaign("network-inc-a", "network", ("inc-a", "inc-b"), (), ())
+    repo.save_analysis([edge], [campaign, network])
     repo.save_run("run-live", "done", "2026-01-01T00:00:00Z", summary={"incidents": 2})
 
     assert client.get("/api/runs/latest").json()["id"] == "run-live"
     assert len(client.get("/api/incidents").json()) == 2
-    assert client.get("/api/incidents/inc-a").json()["evidence"][0]["display"] == "pixel-****"
+    detail = client.get("/api/incidents/inc-a").json()
+    assert detail["evidence"][0]["display"] == "pixel-****" and detail["campaign_id"] == campaign.id
     assert client.get("/api/artifacts/art-inc-a").status_code == 200
     assert client.get("/api/campaigns/campaign-inc-a").json()["size"] == 2
     assert len(client.get("/api/graph").json()["edges"]) == 1
     assert client.get("/api/media/media-a").content.startswith(b"\x89PNG")
+    outside = tmp_path / "outside.png"; outside.write_bytes(b"unsafe")
+    repo.save_media([MediaRef("media-outside", "art-inc-a", "image", "sha2", path=str(outside))])
+    assert client.get("/api/media/media-outside").status_code == 404
 
 
 def test_live_import_requires_configured_data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "live.db"))
     monkeypatch.delenv("SCAMGRAPH_DATA_DIR", raising=False)
+    assert client.get("/api/runs/latest").status_code == 404
     response = client.post("/api/import", json={})
     assert response.status_code == 422 and response.json()["error"] == "validation_error"
 

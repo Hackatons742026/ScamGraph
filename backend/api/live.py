@@ -18,11 +18,9 @@ from backend.engine.memory import classify, cluster_incidents
 
 from .schemas import *  # noqa: F403
 
-
 def repository() -> Repository | None:
     path = os.environ.get("SCAMGRAPH_DB")
     return Repository(path) if path else None
-
 
 def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     started = datetime.now(timezone.utc).isoformat()
@@ -42,7 +40,6 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     except Exception as exc:  # background job boundary
         repo.save_run(run_id, "failed", started, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc)[:500])
 
-
 def coverage(raw: str) -> Coverage:
     value = json.loads(raw or "{}")
     kinds = value.get("kinds_present", [])
@@ -52,7 +49,6 @@ def coverage(raw: str) -> Coverage:
         has_image="image" in kinds, has_video="video" in kinds,
         has_adlib="adlib_json" in kinds, has_text="text" in kinds,
         level="low" if badges else "ok", badges=badges)
-
 
 def run(row: dict) -> RunSummary:
     summary = json.loads(row["summary_json"] or "{}")
@@ -64,9 +60,10 @@ def run(row: dict) -> RunSummary:
         unassigned=summary.get("unassigned", 0), needs_review=summary.get("needs_review", 0),
         new_candidates=summary.get("new_candidates", 0), secrets_redacted=0, error=row["error"])
 
-
 def incident(repo: Repository, row: dict) -> IncidentSummary:
-    memberships = {item["incident_id"]: item["campaign_id"] for item in repo.list_membership()}
+    campaign_ids = {item["id"] for item in repo.list_campaigns() if item["level"] == "campaign"}
+    memberships = {item["incident_id"]: item["campaign_id"] for item in repo.list_membership()
+                   if item["campaign_id"] in campaign_ids}
     campaign_id = memberships.get(row["id"])
     artifacts = repo.get_artifacts(row["id"])
     status = "in_campaign" if campaign_id else "unassigned"
@@ -75,13 +72,11 @@ def incident(repo: Repository, row: dict) -> IncidentSummary:
         coverage=coverage(row["coverage_json"]), status=status, campaign_id=campaign_id,
         campaign_label=campaign_id, network_id=None, outcome=None)
 
-
 def evidence(row: dict) -> EvidenceItem:
     return EvidenceItem(id=f"evidence-{row['id']}", type=row["type"], tier=row["tier"],
         family=row["family"], display=row["display_value"], weight=row["weight"],
         artifact_id=row["artifact_id"] or "", funnel_step=row["funnel_step"],
         ignored=bool(row["ignored"]), ignore_reason=row["ignore_reason"])
-
 
 def artifact(row: dict) -> ArtifactSummary:
     observations = 1
@@ -93,7 +88,6 @@ def artifact(row: dict) -> ArtifactSummary:
         error=row["error"], captured_at=row["captured_at"], duplicate_of=None,
         observations=observations)
 
-
 def edge(row: dict) -> Edge:
     raw = json.loads(row["evidence_json"] or "[]")
     tiers = [item.get("tier", "C") for item in raw]
@@ -103,13 +97,11 @@ def edge(row: dict) -> Edge:
         level=row["level"], tier=tier, families=families, score=row["score"],
         comparable=row["comparable"], low_confidence=row["comparable"] < 2, evidence=[])
 
-
 def campaign(repo: Repository, row: dict) -> CampaignSummary:
     members = [m["incident_id"] for m in repo.list_membership() if m["campaign_id"] == row["id"]]
     return CampaignSummary(id=row["id"], label=row["label"], level=row["level"], size=len(members),
         incident_ids=members, first_seen=row["first_seen"], last_seen=row["last_seen"],
         strongest_evidence=None, network_id=None)
-
 
 def safe_media_path(row: dict) -> Path:
     path = Path(row.get("path") or "").resolve()
@@ -118,7 +110,6 @@ def safe_media_path(row: dict) -> Path:
     if not path.is_file() or not any(path.is_relative_to(root) for root in roots):
         raise FileNotFoundError
     return path
-
 
 def classify_multipart(repo: Repository, body: bytes, content_type: str,
                        exclude: str | None = None) -> tuple[object, object, list]:
