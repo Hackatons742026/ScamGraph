@@ -1,24 +1,35 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as client from "@/api/client";
 import { ApiRequestError } from "@/api/client";
 import { edges, graph } from "@/mocks/data";
 import { renderApp } from "@/test/render";
 
-// jsdom has no canvas: replace Cytoscape with a stub that records elements and tap handlers.
+// jsdom has no canvas: replace Cytoscape with a stub that records elements, tap handlers and its lifecycle.
 const cy = vi.hoisted(() => ({
   handlers: {} as Record<string, (e: { target: { id: () => string } }) => void>,
   lastElements: [] as unknown[],
+  created: 0,
+  destroyed: 0,
+  failNext: false,
 }));
 vi.mock("cytoscape", () => {
   const instance = {
     on: (ev: string, sel: string, fn: (e: { target: { id: () => string } }) => void) => { cy.handlers[`${ev} ${sel}`] = fn; },
-    destroy: () => {},
+    destroy: () => { cy.destroyed += 1; },
     edges: () => ({ unselect: () => {} }),
     getElementById: () => ({ select: () => {} }),
   };
-  const factory = (opts: { elements: unknown[] }) => { cy.lastElements = opts.elements; return instance; };
+  const factory = (opts: { elements: unknown[] }) => {
+    if (cy.failNext) {
+      cy.failNext = false;
+      throw new Error("Can not create edge with nonexistant source");
+    }
+    cy.created += 1;
+    cy.lastElements = opts.elements;
+    return instance;
+  };
   return { default: Object.assign(factory, { use: () => {} }) };
 });
 vi.mock("cytoscape-fcose", () => ({ default: {} }));
@@ -30,6 +41,13 @@ const tap = (sel: string, id: string) =>
   });
 const linkRows = () => within(screen.getByRole("table")).getAllByRole("row").slice(1);
 
+const panel = () => screen.queryByRole("complementary", { name: "Link evidence" });
+const legend = () => screen.getByRole("complementary", { name: "Legend" });
+const hrefs = (el: HTMLElement) => within(el).getAllByRole("link").map((a) => a.getAttribute("href"));
+
+beforeEach(() => {
+  Object.assign(cy, { created: 0, destroyed: 0, failNext: false });
+});
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -94,6 +112,71 @@ describe("Investigation graph", () => {
     expect(await screen.findByText("Campaign Alpha", { selector: "span.font-medium" })).toBeInTheDocument();
     await waitFor(() => expect(linkRows().every((r) => r.textContent?.includes("Alpha"))).toBe(true));
     expect(screen.getByRole("link", { name: "show all" })).toHaveAttribute("href", "/graph");
+  });
+
+  it("creates one Cytoscape instance per graph, not per selection, and destroys it on unmount", async () => {
+    const { unmount } = renderApp("/graph");
+    await screen.findByRole("table");
+    expect(cy.created).toBe(1);
+    await userEvent.click(within(linkRows()[0]!).getByRole("button"));
+    expect(panel()).toBeInTheDocument();
+    expect(cy.created).toBe(1);
+    unmount();
+    expect(cy.destroyed).toBe(1);
+  });
+
+  it("keeps the legend visible while loading, on error and with nothing checked", async () => {
+    vi.spyOn(client, "unwrap").mockRejectedValueOnce(new ApiRequestError(500, { error: "server_error", detail: "Graph unavailable" }));
+    renderApp("/graph");
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    expect(legend()).toBeInTheDocument();
+    await screen.findByRole("alert");
+    expect(legend()).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "campaign" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "network" }));
+    expect(screen.getByText(/Select at least one tier and one level/)).toBeInTheDocument();
+    expect(legend()).toBeInTheDocument();
+  });
+
+  it("keeps the link table usable when Cytoscape rejects the data", async () => {
+    // React reports the caught error via console.error and (in dev) a window "error" event that jsdom prints.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const silence = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener("error", silence);
+    cy.failNext = true;
+    renderApp("/graph");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not be drawn/);
+    expect(linkRows()).toHaveLength(edges.length);
+    window.removeEventListener("error", silence);
+  });
+
+  it("links every incident from the table view, including incidents without links", async () => {
+    renderApp("/graph");
+    await screen.findByRole("table");
+    expect(hrefs(linkRows()[0]!)).toEqual([`/incidents/${edges[0]!.source}`, `/incidents/${edges[0]!.target}`]);
+    const linked = new Set(edges.flatMap((e) => [e.source, e.target]));
+    const unlinked = graph.nodes.filter((n) => n.kind === "incident" && !linked.has(n.id));
+    expect(unlinked.length).toBeGreaterThan(0);
+    expect(hrefs(screen.getByText(/Not linked under these filters/))).toEqual(unlinked.map((n) => `/incidents/${n.id}`));
+  });
+
+  it("clears the selected link when the focus changes, also after going back", async () => {
+    const { router } = renderApp("/graph?campaign=camp_alpha");
+    await screen.findByRole("table");
+    await userEvent.click(within(linkRows()[0]!).getByRole("button"));
+    expect(panel()).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "show all" }));
+    await waitFor(() => expect(linkRows()).toHaveLength(edges.length));
+    expect(panel()).not.toBeInTheDocument();
+    await act(() => router.navigate(-1));
+    await waitFor(() => expect(router.state.location.search).toBe("?campaign=camp_alpha"));
+    expect(panel()).not.toBeInTheDocument();
+  });
+
+  it("explains an empty focused view instead of asking for an import", async () => {
+    renderApp("/graph?campaign=camp_not_in_run");
+    expect(await screen.findByText(/Nothing to show for this focus/)).toBeInTheDocument();
+    expect(screen.queryByText(/Run an import/)).not.toBeInTheDocument();
   });
 
   it("shows empty and error states", async () => {

@@ -22,6 +22,7 @@ describe("Campaigns", () => {
     const alpha = campaigns.find((c) => c.level === "campaign")!;
     const row = screen.getByRole("link", { name: alpha.label }).closest("tr")!;
     expect(within(row).getByText(alpha.strongest_evidence!.display)).toBeInTheDocument();
+    expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(new RegExp(`^${alpha.size}$`));
     expect(within(row).getByRole("img", { name: new RegExp(`^Tier ${alpha.strongest_evidence!.tier}`) })).toBeInTheDocument();
   });
 

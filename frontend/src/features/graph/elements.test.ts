@@ -8,10 +8,12 @@ describe("edgeVisual (must match the legend)", () => {
     expect(edgeVisual({ tier: "A", families: [], low_confidence: false })).toEqual({ width: 6, lineStyle: "solid", color: TIER.A.color, opacity: 1 });
   });
 
-  it("tier B is solid, thinner than A, coloured by its first family", () => {
-    const v = edgeVisual({ tier: "B", families: ["kit", "creative"], low_confidence: false });
+  it("tier B is solid, thinner than A, coloured by its family; several families use the neutral tier-B colour", () => {
+    const v = edgeVisual({ tier: "B", families: ["kit"], low_confidence: false });
     expect(v).toMatchObject({ lineStyle: "solid", color: FAMILY.kit.color });
     expect(v.width).toBeLessThan(6);
+    // The API sorts families alphabetically, so "first" would be arbitrary.
+    expect(edgeVisual({ tier: "B", families: ["domain", "kit"], low_confidence: false }).color).toBe(TIER.B.color);
     expect(edgeVisual({ tier: "B", families: ["unknown_family"], low_confidence: false }).color).toBe(TIER.B.color);
     expect(edgeVisual({ tier: "B", families: [], low_confidence: false }).color).toBe(TIER.B.color);
   });
@@ -51,6 +53,22 @@ describe("toElements", () => {
     expect(byId("dangling")).toBeUndefined();
     expect(byId("dangling_src")).toBeUndefined();
     expect(byId("e1")!.data).toMatchObject({ source: "i1", target: "i2", lineStyle: "dashed", color: LOW_CONFIDENCE_COLOR });
+  });
+
+  it("drops duplicate ids (first wins), edges reusing a node id, self-parents and parent cycles", () => {
+    const node = (id: string, parent: string | null) => ({ id, kind: "campaign" as const, label: id, parent, outcome: null, coverage_level: null });
+    const edge = (id: string, source: string, target: string) => ({ id, source, target, level: "network" as const, tier: "C" as const, families: [], score: 1, comparable: 2, low_confidence: false, evidence: [] });
+    const out = toElements({
+      nodes: [node("a", "b"), node("b", "a"), node("self", "self"), node("child", "a"), node("a", null)],
+      edges: [edge("x", "a", "b"), edge("x", "b", "a"), edge("child", "a", "b")],
+    });
+    expect(out.filter((e) => e.data.id === "a")).toHaveLength(1);
+    expect(out.filter((e) => e.data.id === "x")).toEqual([expect.objectContaining({ data: expect.objectContaining({ source: "a", target: "b" }) })]);
+    expect(out.filter((e) => e.data.id === "child")).toHaveLength(1);
+    const parent = (id: string) => out.find((e) => e.data.id === id)!.data.parent as string | undefined;
+    expect([parent("a"), parent("b")].filter(Boolean)).toHaveLength(1); // the a↔b cycle is broken once, not dropped twice
+    expect(parent("self")).toBeUndefined();
+    expect(parent("child")).toBe("a");
   });
 
   it("marks low-coverage and needs-review incidents with classes", () => {
