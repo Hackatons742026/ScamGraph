@@ -27,8 +27,32 @@ pipeline operations and `SCAMGRAPH_CACHE_DIR` controls generated media. Without
 `exclude_incident`. The whole request limit is 10 MB and each uploaded file is
 limited to 5 MB. Filenames are reduced to basenames. Public projections mask
 display values and omit evidence hashes, source paths, and OCR text. Errors use
-`{ "error": "…", "detail": "…" }`. Optional mutation and export routes may
-be present in OpenAPI but currently return HTTP 501.
+`{ "error": "…", "detail": "…" }`. Optional mutation routes may be present
+in OpenAPI but currently return HTTP 501.
+
+## Campaign exports
+
+Exports require live mode (`SCAMGRAPH_DB`) and a valid campaign-level ID. Each
+response is an attachment with `Cache-Control: no-store` and
+`X-Content-Type-Options: nosniff`:
+
+| Method and path | Content type |
+|---|---|
+| `GET /api/exports/{campaign}.html` | `text/html; charset=utf-8` |
+| `GET /api/exports/{campaign}.csv` | `text/csv; charset=utf-8` |
+| `GET /api/exports/{campaign}.misp.json` | `application/json` (MISP core event envelope) |
+
+The self-contained HTML contains campaign members, artifact provenance,
+evidence tiers/families, and campaign links. CSV contains separate rows for
+incidents, artifacts, evidence observations, and campaign edges. MISP JSON
+contains masked text attributes with `to_ids: false`; it is a reporting artifact,
+not an indicator feed for automated blocking. All formats use keyed pseudonymous
+references for campaigns, incidents, artifacts, and values. They omit raw
+display values, evidence hashes, filesystem paths, filenames, capture content,
+and OCR. The export key is `SCAMGRAPH_SALT`, so exports are stable only while
+that private salt remains unchanged. Unknown campaigns, network IDs, and
+unsupported suffixes return 404; exports without a configured live database
+return 501. The JSON envelope follows the [official MISP core format](https://github.com/MISP/misp-rfc/blob/main/misp-core-format/raw.md).
 
 The full response schemas are defined in `backend/api/schemas.py`; inspect
 `/openapi.json` on a running service for the generated OpenAPI document.

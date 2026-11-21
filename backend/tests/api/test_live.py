@@ -1,8 +1,12 @@
+import csv
+import io
+import json
 import sqlite3
 from fastapi.testclient import TestClient
 from backend.api.main import app
 from backend.api.live import stable_campaign
 from backend.db import Repository
+from backend.exports.formats import render_csv, render_html
 from backend.engine.linking import LinkEdge
 from backend.engine.memory import Campaign, classify, cluster_incidents
 from backend.pipeline.models import Artifact, Coverage, Evidence, Incident, MediaRef
@@ -59,6 +63,86 @@ def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
         "known_campaign", "new_candidate", "needs_review"}
     huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 10_000_001)})
     assert huge.status_code == 413 and huge.json()["error"] == "http_error"
+
+def test_campaign_exports_are_masked_downloads(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "export.db"))
+    monkeypatch.setenv("SCAMGRAPH_SALT", "synthetic-export-salt")
+    repo = Repository(tmp_path / "export.db")
+    raw_display = "RAW_PRIVATE_SENTINEL"
+    raw_path = "/local/private/SYNTHETIC_SOURCE_SENTINEL.har"
+    for identifier in ("inc-export-a", "inc-export-b"):
+        repo.save_incident(Incident(identifier, raw_path, title="PRIVATE_TITLE_SENTINEL",
+            coverage=Coverage(kinds_present=["har"])))
+        artifact = Artifact(f"art-{identifier}", identifier, "har", raw_path,
+            role="prelander", parse_status="ok")
+        repo.save_artifacts([artifact])
+        repo.save_evidence(identifier, [Evidence("landing_domain", "B", "domain",
+            "synthetic-private-hash", raw_display, artifact_id=artifact.id, funnel_step=1)])
+    campaign = Campaign("campaign-export-a", "campaign", ("inc-export-a", "inc-export-b"), (), ())
+    repo.save_analysis([], [campaign])
+
+    urls = {
+        "html": ("/api/exports/campaign-export-a.html", "text/html"),
+        "csv": ("/api/exports/campaign-export-a.csv", "text/csv"),
+        "misp": ("/api/exports/campaign-export-a.misp.json", "application/json"),
+    }
+    responses = {kind: client.get(url) for kind, (url, _) in urls.items()}
+    for kind, (url, media_type) in urls.items():
+        response = responses[kind]
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith(media_type)
+        assert "attachment; filename=" in response.headers["content-disposition"]
+        assert response.headers["cache-control"] == "no-store"
+        for private in (raw_display, raw_path, "PRIVATE_TITLE_SENTINEL", "synthetic-private-hash",
+                        "campaign-export-a", "inc-export-a", "inc-export-b", "art-inc-export-a"):
+            assert private not in response.text
+        assert "campaign-export-a" not in response.headers["content-disposition"]
+
+    rows = list(csv.DictReader(io.StringIO(responses["csv"].text)))
+    evidence_rows = [row for row in rows if row["record_type"] == "evidence"]
+    assert evidence_rows and evidence_rows[0]["masked_ref"].startswith("value-")
+    assert evidence_rows[0]["artifact_kind"] == "har" and evidence_rows[0]["funnel_step"] == "1"
+    assert {row["record_type"] for row in rows} >= {"incident", "artifact", "evidence"}
+    event = json.loads(responses["misp"].text)["Event"]
+    assert event["info"].startswith("ScamGraph masked campaign campaign-")
+    assert {"Orgc", "date", "analysis", "timestamp", "threat_level_id", "Attribute"} <= set(event)
+    assert event["Orgc"]["uuid"] and event["Attribute"][0]["uuid"]
+    assert event["Attribute"] and event["Attribute"][0]["to_ids"] is False
+    assert event["Attribute"][0]["value"].startswith("masked:landing_domain:value-")
+    assert client.get("/api/exports/missing.csv").status_code == 404
+    assert client.get("/api/exports/network-export-a.csv").status_code == 404
+    assert client.get("/api/exports/campaign-export-a.xml").status_code == 404
+
+def test_csv_export_neutralizes_spreadsheet_formulas():
+    data = {
+        "campaign_ref": "campaign-safe", "incidents": [{"ref": "incident-safe",
+            "first_seen": "=2+2", "last_seen": ""}],
+        "artifacts": [{"ref": "artifact-safe", "incident_ref": "incident-safe",
+            "kind": "@SUM(1,2)", "funnel_step": None}],
+        "evidence": [{"incident_ref": "incident-safe", "artifact_ref": "artifact-safe",
+            "artifact_kind": None, "type": "-2+3", "tier": "\t=4+5", "family": "+6+7",
+            "masked_ref": "value-safe", "funnel_step": None}],
+        "edges": [],
+    }
+    rows = list(csv.DictReader(io.StringIO(render_csv(data).decode("utf-8"))))
+    incident = next(row for row in rows if row["record_type"] == "incident")
+    artifact = next(row for row in rows if row["record_type"] == "artifact")
+    evidence = next(row for row in rows if row["record_type"] == "evidence")
+    assert incident["first_seen"] == "'=2+2"
+    assert artifact["artifact_kind"] == "'@SUM(1,2)"
+    assert evidence["evidence_type"] == "'-2+3"
+    assert evidence["tier"] == "'\t=4+5"
+    assert evidence["family"] == "'+6+7"
+
+def test_html_export_escapes_projection_values():
+    data = {"campaign_ref": "campaign-safe", "generated_at": "<script>alert(1)</script>",
+        "incidents": [{"ref": "incident-safe", "first_seen": "<img src=x>", "last_seen": ""}],
+        "artifacts": [], "evidence": [], "edges": [],
+    }
+    rendered = render_html(data).decode("utf-8")
+    assert "<script>alert(1)</script>" not in rendered
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in rendered
+    assert "&lt;img src=x&gt;" in rendered
 def test_held_out_campaign_id_maps_to_full_memory():
     edges = [LinkEdge(a, b, "campaign", "A", (), 1, 2, False, ()) for a, b in (("a", "b"), ("a", "c"), ("b", "c"))]
     full = cluster_incidents(["a", "b", "c"], edges); held = cluster_incidents(["a", "b", "c"], edges, exclude_incident="a")
