@@ -1,8 +1,8 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as client from "@/api/client";
 import { ApiRequestError } from "@/api/client";
-import { STATUS } from "@/lib/domain";
+import { OUTCOME, STATUS } from "@/lib/domain";
 import { incidents } from "@/mocks/data";
 import { renderApp } from "@/test/render";
 
@@ -13,6 +13,17 @@ afterEach(() => {
 const queueRows = incidents.filter((i) => i.status === "needs_review" || i.status === "unassigned");
 
 describe("Review queue page", () => {
+  it("shows a badge once when status and outcome agree, and both when they differ", async () => {
+    renderApp("/review");
+    const same = queueRows.find((i) => i.outcome === i.status)!;
+    const card = (await screen.findByRole("link", { name: same.label })).closest("li")!;
+    expect(within(card).getAllByText(STATUS[same.status])).toHaveLength(1);
+    const differs = queueRows.find((i) => i.outcome !== i.status)!;
+    const other = screen.getByRole("link", { name: differs.label }).closest("li")!;
+    expect(within(other).getByText(STATUS[differs.status])).toBeInTheDocument();
+    expect(within(other).getByText(differs.outcome ? OUTCOME[differs.outcome] : "no decision")).toBeInTheDocument();
+  });
+
   it("lists needs_review and unassigned incidents with reasons", async () => {
     renderApp("/review");
     expect(await screen.findByRole("heading", { level: 1, name: "Review queue" })).toBeInTheDocument();
