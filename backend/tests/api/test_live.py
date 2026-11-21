@@ -1,9 +1,10 @@
 import sqlite3
 from fastapi.testclient import TestClient
 from backend.api.main import app
+from backend.api.live import stable_campaign
 from backend.db import Repository
 from backend.engine.linking import LinkEdge
-from backend.engine.memory import Campaign
+from backend.engine.memory import Campaign, classify, cluster_incidents
 from backend.pipeline.models import Artifact, Coverage, Evidence, Incident, MediaRef
 client = TestClient(app)
 def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
@@ -62,3 +63,8 @@ def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
         "known_campaign", "new_candidate", "needs_review"}
     huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 10_000_001)})
     assert huge.status_code == 413 and huge.json()["error"] == "http_error"
+def test_held_out_campaign_id_maps_to_full_memory():
+    edges = [LinkEdge(a, b, "campaign", "A", (), 1, 2, False, ()) for a, b in (("a", "b"), ("a", "c"), ("b", "c"))]
+    full = cluster_incidents(["a", "b", "c"], edges); held = cluster_incidents(["a", "b", "c"], edges, exclude_incident="a")
+    result = classify("a", edges[:2], held, coverage_ok=True, exclude_incident="a")
+    assert stable_campaign(result, full, "a") == full.campaign_by_incident["a"]

@@ -17,6 +17,8 @@ from backend.engine.memory import classify, cluster_incidents
 
 from .schemas import *  # noqa: F403
 
+def stable_campaign(result: object, clusters: object, incident_id: str) -> str | None: return clusters.campaign_by_incident.get(incident_id) if result.outcome == "known_campaign" else None
+
 def repository() -> Repository | None:
     path = os.environ.get("SCAMGRAPH_DB")
     return Repository(path) if path else None
@@ -39,16 +41,17 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
             memory = cluster_incidents(grouped, edges, exclude_incident=identifier)
             result = classify(identifier, [e for e in edges if identifier in {e.source, e.target}],
                 memory, coverage_ok=bool(grouped[identifier]), exclude_incident=identifier)
-            decisions.append({"incident_id": identifier, "outcome": result.outcome,
-                "campaign_id": result.campaign_id, "reasons": list(result.reasons), "decided_at": now})
+            decisions.append({"incident_id": identifier, "outcome": result.outcome, "campaign_id": stable_campaign(result, clusters, identifier),
+                "reasons": list(result.reasons), "decided_at": now})
         repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns], decisions)
         stats: dict[str, dict[str, int]] = {}
         for identifier in grouped:
             for item in repo.get_artifacts(identifier):
                 value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0})
                 value["total"] += 1; value["failed" if item["parse_status"] == "failed" else "parsed"] += 1
-        summary.update(campaigns=len(clusters.campaigns), networks=len(clusters.networks),
-            unassigned=len(clusters.unassigned), new_candidates=len(clusters.unassigned), needs_review=0,
+        summary.update(campaigns=len(clusters.campaigns), networks=len(clusters.networks), unassigned=len(clusters.unassigned),
+            new_candidates=sum(d["outcome"] == "new_candidate" for d in decisions),
+            needs_review=sum(d["outcome"] == "needs_review" for d in decisions),
             artifacts_by_kind=stats)
         repo.save_run(run_id, "done", started, finished_at=datetime.now(timezone.utc).isoformat(), summary=summary)
     except Exception as exc:  # background job boundary
