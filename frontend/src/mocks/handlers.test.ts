@@ -40,6 +40,22 @@ describe("mock transport covers contract v1", () => {
     expect((await unwrap(api.GET("/api/eval/report"))).scenarios).toHaveLength(7);
   });
 
+  it("serves masked synthetic exports for campaigns only, 404 for networks and unknown ids", async () => {
+    const all = await unwrap(api.GET("/api/campaigns"));
+    const camp = all.find((c) => c.level === "campaign")!;
+    const net = all.find((c) => c.level === "network")!;
+    const csv = await mockFetch(new Request(`http://localhost/api/exports/${camp.id}.csv`));
+    expect(csv.headers.get("Content-Type")).toMatch(/^text\/csv/);
+    expect(csv.headers.get("Content-Disposition")).toMatch(/^attachment; filename="scamgraph-campaign-[0-9a-f]{16}\.csv"$/);
+    const text = await csv.text();
+    expect(text).toMatch(/^record_type,campaign_ref,incident_ref\n/);
+    expect(text).not.toContain(camp.id);
+    const misp = await mockFetch(new Request(`http://localhost/api/exports/${camp.id}.misp.json`));
+    expect(JSON.parse(await misp.text()).Event.info).toMatch(/synthetic/);
+    expect((await mockFetch(new Request(`http://localhost/api/exports/${net.id}.csv`))).status).toBe(404);
+    expect((await mockFetch(new Request("http://localhost/api/exports/camp_missing.html"))).status).toBe(404);
+  });
+
   it("returns contract errors: 404 for unknown ids, 501 for overrides", async () => {
     await expect(unwrap(api.GET("/api/incidents/{incident_id}", { params: { path: { incident_id: "missing" } } }))).rejects.toMatchObject({ status: 404, code: "not_found" });
     // The live OpenAPI declares no path param or body for the not-yet-enabled override routes (#9), so the typed
