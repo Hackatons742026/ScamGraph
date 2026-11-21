@@ -9,11 +9,8 @@ from backend.pipeline.models import Artifact, Coverage, Evidence, Incident, Medi
 client = TestClient(app)
 def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     db = tmp_path / "live.db"
-    media_path = tmp_path / "cache" / "frame.png"
-    media_path.parent.mkdir()
-    media_path.write_bytes(b"\x89PNG\r\n\x1a\n")
-    monkeypatch.setenv("SCAMGRAPH_DB", str(db))
-    monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(media_path.parent))
+    media_path = tmp_path / "cache" / "frame.png"; media_path.parent.mkdir(); media_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    monkeypatch.setenv("SCAMGRAPH_DB", str(db)); monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(media_path.parent))
     repo = Repository(db)
     for identifier in ("inc-a", "inc-b"):
         incident = Incident(identifier, "synthetic", title=f"Masked {identifier}",
@@ -35,8 +32,7 @@ def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     detail = client.get("/api/incidents/inc-a").json()
     assert detail["evidence"][0]["display"] == "pixel-****" and detail["campaign_id"] == campaign.id
     assert "/private" not in client.get("/api/artifacts/art-inc-a").text
-    assert client.get("/api/campaigns/campaign-inc-a").json()["size"] == 2
-    assert len(client.get("/api/graph").json()["edges"]) == 1
+    assert client.get("/api/campaigns/campaign-inc-a").json()["size"] == 2 and len(client.get("/api/graph").json()["edges"]) == 1
     assert client.get("/api/media/media-a").content.startswith(b"\x89PNG")
     outside = tmp_path / "outside.png"; outside.write_bytes(b"unsafe")
     repo.save_media([MediaRef("media-outside", "art-inc-a", "image", "sha2", path=str(outside))])

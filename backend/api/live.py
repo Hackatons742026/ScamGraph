@@ -14,14 +14,10 @@ from backend.pipeline.run import process_input, run_on_data_dir
 from backend.pipeline.models import Evidence
 from backend.engine.linking import link_incidents
 from backend.engine.memory import classify, cluster_incidents
-
 from .schemas import *  # noqa: F403
-
 def stable_campaign(result: object, clusters: object, incident_id: str) -> str | None: return clusters.campaign_by_incident.get(incident_id) if result.outcome == "known_campaign" else None
-
 def repository() -> Repository | None:
-    path = os.environ.get("SCAMGRAPH_DB")
-    return Repository(path) if path else None
+    return Repository(os.environ["SCAMGRAPH_DB"]) if os.environ.get("SCAMGRAPH_DB") else None
 def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     started = datetime.now(timezone.utc).isoformat()
     try:
