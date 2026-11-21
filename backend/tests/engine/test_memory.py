@@ -37,6 +37,8 @@ def test_memory_known_new_review_conflict_and_exclusion():
 
     new = classify("new", [edge("new", "a", "network", comparable=3)], base, coverage_ok=True)
     assert new.outcome == "new_candidate"
+    no_link = classify("new", [], base, coverage_ok=True)
+    assert no_link.outcome == "new_candidate"
     review = classify("new", [], base, coverage_ok=False)
     assert review.outcome == "needs_review"
 

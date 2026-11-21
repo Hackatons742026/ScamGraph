@@ -167,6 +167,6 @@ def classify(
         campaign_id, matching = next(iter(matches.items()))
         strongest = "tier A" if any(edge.tier == "A" for edge in matching) else "multiple evidence families"
         return Classification("known_campaign", campaign_id, (f"Known campaign match via {strongest}.",))
-    if not coverage_ok or maximum_comparable < 2:
+    if not coverage_ok or (candidate_edges and maximum_comparable < 2):
         return Classification("needs_review", None, ("Coverage is too low for a reliable campaign decision.",))
     return Classification("new_candidate", None, ("No campaign-level match was found with sufficient coverage.",))
