@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from math import log
 import re
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 from backend.pipeline.models import Evidence, EvidenceFamily, EvidenceTier
 
@@ -96,25 +96,27 @@ def _matched(
     incident_count: int,
     document_frequency: Mapping[str, int],
 ) -> list[MatchedEvidence]:
+    left_by_key: dict[tuple[str, str], list[Evidence]] = defaultdict(list)
     right_by_key: dict[tuple[str, str], list[Evidence]] = defaultdict(list)
+    for evidence in left:
+        if not _engine_ignored(evidence):
+            left_by_key[(evidence.type, evidence.value_hash)].append(evidence)
     for evidence in right:
         if not _engine_ignored(evidence):
             right_by_key[(evidence.type, evidence.value_hash)].append(evidence)
 
     matches: list[MatchedEvidence] = []
-    seen: set[tuple[str, str]] = set()
-    for evidence in left:
-        key = (evidence.type, evidence.value_hash)
-        if key in seen or _engine_ignored(evidence) or key not in right_by_key:
-            continue
-        seen.add(key)
+    for key in sorted(left_by_key.keys() & right_by_key.keys()):
+        left_rows = left_by_key[key]
+        evidence = left_rows[0]
         df = document_frequency.get(evidence.value_hash, 1)
         if df / incident_count > 0.30:
             continue
         peers = right_by_key[key]
         family = _value(evidence.family) if evidence.family is not None else None
-        artifacts = {row.artifact_id for row in [evidence, *peers] if row.artifact_id}
-        steps = {row.funnel_step for row in [evidence, *peers] if row.funnel_step is not None}
+        observations = [*left_rows, *peers]
+        artifacts = {row.artifact_id for row in observations if row.artifact_id}
+        steps = {row.funnel_step for row in observations if row.funnel_step is not None}
         matches.append(
             MatchedEvidence(
                 type=evidence.type,

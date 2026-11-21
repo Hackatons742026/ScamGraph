@@ -39,6 +39,20 @@ def test_tier_a_links_alone_and_keeps_provenance():
     assert edge.evidence[0].funnel_steps == (1, 2)
 
 
+def test_repeated_observations_keep_all_provenance():
+    left = [
+        ev("pixel_id", "px", "A", artifact_id="a1", funnel_step=1),
+        ev("pixel_id", "px", "A", artifact_id="a2", funnel_step=2),
+    ]
+    right = [
+        ev("pixel_id", "px", "A", artifact_id="b1", funnel_step=3),
+        ev("pixel_id", "px", "A", artifact_id="b2", funnel_step=4),
+    ]
+    match = one_edge(corpus(left, right)).evidence[0]
+    assert match.artifact_ids == ("a1", "a2", "b1", "b2")
+    assert match.funnel_steps == (1, 2, 3, 4)
+
+
 def test_kit_counts_once_and_never_makes_campaign_by_itself():
     shared = [ev("dom", "dom", "B", "kit"), ev("api_path", "api", "B", "kit")]
     edge = one_edge(corpus(shared, shared))
