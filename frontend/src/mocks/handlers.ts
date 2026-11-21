@@ -65,6 +65,17 @@ async function classify(req: Request): Promise<ClassifyResult> {
   };
 }
 
+/** Mock-mode export file: synthetic content with the backend's content type and attachment filename. */
+function syntheticExport(campaign: NonNullable<ReturnType<typeof db.campaignDetail>>, ext: string): Response {
+  const members = campaign.members.map((m) => m.id);
+  const body =
+    ext === "csv" ? `campaign_ref,incident_ref\n${members.map((m) => `${campaign.id},${m}`).join("\n")}\n`
+    : ext === "html" ? `<!doctype html><title>Synthetic evidence pack</title><h1>${campaign.label} (synthetic, mock mode)</h1>`
+    : JSON.stringify({ Event: { info: `${campaign.label} (synthetic, mock mode)`, Attribute: [] } });
+  const type = ext === "csv" ? "text/csv; charset=utf-8" : ext === "html" ? "text/html; charset=utf-8" : "application/json";
+  return new Response(body, { headers: { "Content-Type": type, "Content-Disposition": `attachment; filename="scamgraph-${campaign.id}.${ext}"` } });
+}
+
 const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus?: number]> = [
   ["GET", /^\/api\/health$/, () => ({ status: "ok", version: "1" })],
   ["POST", /^\/api\/import$/, () => {
@@ -108,6 +119,7 @@ const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus
   }],
   ["POST", /^\/api\/classify$/, (_, __, req) => classify(req)],
   ["GET", /^\/api\/eval\/report$/, () => db.evalReport],
+  ["GET", /^\/api\/exports\/([A-Za-z0-9_-]{1,128})\.(html|csv|misp\.json)$/, ([id, ext]) => syntheticExport(orNotFound(db.campaignDetail(id!), "Campaign"), ext!)],
   ["POST", /^\/api\/edges\/([^/]+)\/decision$/, () => { throw new HttpError(501, "not_implemented", "Analyst overrides are enabled after core freeze."); }],
 ];
 
@@ -123,7 +135,7 @@ export async function mockFetch(req: Request): Promise<Response> {
     if (!m || method !== req.method) continue;
     try {
       const body = await handler(m.slice(1), url, req);
-      return json(okStatus, body);
+      return body instanceof Response ? body : json(okStatus, body);
     } catch (e) {
       if (e instanceof HttpError) return json(e.status, { error: e.error, detail: e.detail });
       throw e;

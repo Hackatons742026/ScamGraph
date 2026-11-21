@@ -7,6 +7,7 @@ import { TierBadge } from "@/components/domain/badges";
 import { QueryState } from "@/components/domain/QueryState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
+import { ExportLinks } from "@/features/campaigns/ExportLinks";
 import { humanize, formatDate } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ export function Campaigns() {
                     <th className="px-3 py-2 font-medium">Name</th><th className="px-3 py-2 font-medium">Level</th>
                     <th className="px-3 py-2 text-right font-medium">Incidents</th><th className="px-3 py-2 font-medium">Strongest evidence</th>
                     <th className="px-3 py-2 font-medium">First seen</th><th className="px-3 py-2 font-medium">Last seen</th>
+                    <th className="px-3 py-2 font-medium">Export</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -65,6 +67,7 @@ export function Campaigns() {
                       </td>
                       <td className="px-3 py-2 tabular-nums">{formatDate(c.first_seen)}</td>
                       <td className="px-3 py-2 tabular-nums">{formatDate(c.last_seen)}</td>
+                      <td className="px-3 py-2"><ExportLinks campaignId={c.id} label={c.label} /></td>
                     </tr>
                   ))}
                 </tbody>
