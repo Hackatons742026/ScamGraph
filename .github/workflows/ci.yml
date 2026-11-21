@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded PR runs only; every push to main keeps its own result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  data-safety:
+    name: Data safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: No dataset files tracked or added
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Raw NASK artifacts and databases must never be committed.
+          # Synthetic fixtures are allowed only in the two fixture directories.
+          # core.quotePath=false keeps non-ASCII (e.g. Polish) file names unescaped so the patterns match.
+          pattern='^data/|\.(har|mhtml|mp4|mov|webm|mkv|db|db-journal|sqlite3?)$|\.info\.json$'
+          allow='^(backend/tests/fixtures|frontend/src/test/fixtures)/'
+          files=$(git -c core.quotePath=false ls-files)
+          if [ -n "$BASE_REF" ]; then
+            # On PRs also check files added in any commit of the branch: deleting later does not erase history.
+            added=$(git -c core.quotePath=false log --name-only --diff-filter=A --format= "origin/$BASE_REF..HEAD")
+            files=$(printf '%s\n%s\n' "$files" "$added")
+          fi
+          bad=$(printf '%s\n' "$files" | grep -iE "$pattern" | grep -vE "$allow" | sort -u || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Dataset-like files are tracked or were added in this branch (list below). Remove them from git history."
+            echo "$bad"
+            exit 1
+          fi
+          echo "OK: no dataset files tracked or added."
+
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Test-only salt, not a secret. Real salts are set per machine and never committed.
+      SCAMGRAPH_SALT: ci-test-salt-not-a-secret
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect backend
+        id: detect
+        run: |
+          if [ -f backend/requirements.txt ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::backend/requirements.txt not found, skipping backend checks."
+          fi
+
+      - name: Set up Python 3.11
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install system tools (ffmpeg, Tesseract + Polish)
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-pol
+
+      - name: Install Python dependencies
+        if: steps.detect.outputs.present == 'true'
+        # Heavy optional deps (backend/requirements-optional.txt) are intentionally not installed in CI.
+        run: pip install -r backend/requirements.txt
+
+      - name: Run pytest
+        if: steps.detect.outputs.present == 'true'
+        env:
+          SCAMGRAPH_DB: ${{ runner.temp }}/scamgraph-ci.db
+          SCAMGRAPH_CACHE_DIR: ${{ runner.temp }}/scamgraph-cache
+        run: |
+          # Same command developers run locally (see architecture.md).
+          if [ ! -d backend/tests ]; then
+            echo "::warning::backend/tests not found, no backend tests ran."
+            exit 0
+          fi
+          set +e
+          pytest backend/tests -q
+          rc=$?
+          if [ "$rc" -eq 5 ]; then
+            echo "::warning::pytest collected no tests."
+            exit 0
+          fi
+          exit "$rc"
+
+  frontend:
+    name: Frontend (lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect frontend
+        id: detect
+        working-directory: .
+        run: |
+          if [ -f frontend/package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::frontend/package-lock.json not found, skipping frontend checks."
+          fi
+
+      - name: Set up Node
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        if: steps.detect.outputs.present == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.detect.outputs.present == 'true'
+        run: npm run lint
+
+      - name: Test
+        if: steps.detect.outputs.present == 'true'
+        run: npm run test -- --run
+
+      - name: Build
+        if: steps.detect.outputs.present == 'true'
+        run: npm run build
