@@ -26,10 +26,11 @@ export async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,
 ): Promise<T> {
   const { data, error, response } = await call;
-  if (error !== undefined || data === undefined) {
+  if (error !== undefined || !response.ok) {
     throw new ApiRequestError(response.status, error as Partial<ApiError> | undefined);
   }
-  return data;
+  // 2xx with an empty body (e.g. 204) is a success; openapi-fetch reports it as data === undefined.
+  return data as T;
 }
 
 /** URL for <img> tags. Mock mode never touches real media. */

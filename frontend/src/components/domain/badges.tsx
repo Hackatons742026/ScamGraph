@@ -6,6 +6,7 @@ export function TierBadge({ tier }: { tier: Tier }) {
   const t = TIER[tier];
   return (
     <span
+      role="img"
       title={t.hint}
       aria-label={`${t.label}: ${t.hint}`}
       className="inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-bold text-white"
@@ -29,7 +30,8 @@ export function FamilyLabel({ family }: { family: Family }) {
 
 export function CoverageBadges({ coverage }: { coverage: Coverage }) {
   if (!coverage.badges.length) {
-    return <Badge variant="success">full coverage</Badge>;
+    // `level` is authoritative: low coverage without named gaps must never look complete.
+    return coverage.level === "low" ? <Badge variant="warning">low coverage</Badge> : <Badge variant="success">full coverage</Badge>;
   }
   return (
     <span className="inline-flex flex-wrap gap-1">
