@@ -50,7 +50,9 @@ def test_image_parse_hashes_and_caches(tmp_path: Path) -> None:
 def test_ocr_runs_when_tesseract_present(tmp_path: Path) -> None:
     path = write_png(tmp_path / "ocr.png")
     result = ocr_image(path)
+    # Blank synthetic image may yield empty text; engine must still be selected.
     assert result.engine == "tesseract"
+    assert result.error is None or "pol failed" in (result.error or "")
 
 
 def test_ocr_soft_fails_without_engine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

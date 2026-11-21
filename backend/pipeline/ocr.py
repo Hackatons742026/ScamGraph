@@ -77,11 +77,11 @@ def _preprocess(path: Path):
         logger.info("Pillow not installed; OCR preprocess skipped")
         return None
     try:
-        img = Image.open(path)
-        img = ImageOps.grayscale(img)
+        with Image.open(path) as opened:
+            img = ImageOps.grayscale(opened.convert("RGB"))
         w, h = img.size
         if w > 0 and h > 0:
-            img = img.resize((w * 2, h * 2))
+            img = img.resize((max(w * 2, 1), max(h * 2, 1)))
         return img
     except Exception as exc:  # noqa: BLE001
         logger.info("OCR preprocess failed: %s", exc)
