@@ -88,8 +88,23 @@ const routes: Array<[method: string, pattern: RegExp, handler: Handler, okStatus
   ["GET", /^\/api\/graph$/, (_, url) => {
     const tiers = csv(url, "tiers");
     const levels = csv(url, "levels");
-    const edges = db.graph.edges.filter((e) => (!tiers.length || tiers.includes(e.tier)) && (!levels.length || levels.includes(e.level)));
-    return { ...db.graph, edges };
+    const campaign = url.searchParams.get("campaign");
+    let nodes = db.graph.nodes;
+    if (campaign) {
+      // Focus: the campaign/network, its member incidents and child groups, plus its parent network.
+      // Unknown focus → empty graph (200), as the backend does.
+      const focus = nodes.find((n) => n.id === campaign);
+      if (!focus) return { nodes: [], edges: [] };
+      const children = nodes.filter((n) => n.parent === campaign);
+      const members = nodes.filter((n) => n.parent === campaign || children.some((c) => c.id === n.parent));
+      const keep = new Set([focus.id, ...(focus.parent ? [focus.parent] : []), ...children.map((n) => n.id), ...members.map((n) => n.id)]);
+      nodes = nodes.filter((n) => keep.has(n.id));
+    }
+    const ids = new Set(nodes.map((n) => n.id));
+    const edges = db.graph.edges.filter(
+      (e) => ids.has(e.source) && ids.has(e.target) && (!tiers.length || tiers.includes(e.tier)) && (!levels.length || levels.includes(e.level)),
+    );
+    return { nodes, edges };
   }],
   ["POST", /^\/api\/classify$/, (_, __, req) => classify(req)],
   ["GET", /^\/api\/eval\/report$/, () => db.evalReport],

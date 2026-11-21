@@ -2,6 +2,12 @@
 // Colours are hex so Cytoscape (fe-4) can use the same values as the badges.
 import type { Family, IncidentStatus, Outcome, RunStatus, Tier } from "@/api/types";
 
+/** Evidence type keys (snake_case from the API) as readable text. */
+export const humanize = (s: string): string => s.replace(/_/g, " ");
+
+/** Deterministic date for tables (no locale/timezone drift): YYYY-MM-DD or an em dash. */
+export const formatDate = (iso: string | null): string => (iso ? iso.slice(0, 10) : "—");
+
 export const TIER: Record<Tier, { label: string; hint: string; color: string }> = {
   A: { label: "Tier A", hint: "Unique identifier: links incidents on its own", color: "#b91c1c" },
   B: { label: "Tier B", hint: "Shared infrastructure or kit: needs two families for a campaign link", color: "#1d4ed8" },

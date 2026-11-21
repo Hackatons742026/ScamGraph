@@ -1,11 +1,13 @@
 import type { RouteObject } from "react-router";
 import { AppShell } from "@/components/layout/AppShell";
+import { Campaigns } from "@/pages/Campaigns";
 import { Classify } from "@/pages/Classify";
+import { Graph } from "@/pages/Graph";
 import { IncidentDetail } from "@/pages/IncidentDetail";
 import { Incidents } from "@/pages/Incidents";
 import { Overview } from "@/pages/Overview";
 import { Review } from "@/pages/Review";
-import { Campaigns, Evaluation, Graph, NotFound } from "@/pages/placeholders";
+import { Evaluation, NotFound } from "@/pages/placeholders";
 
 export const routes: RouteObject[] = [
   {
