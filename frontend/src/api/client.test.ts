@@ -1,6 +1,6 @@
 import createClient from "openapi-fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiRequestError, mediaUrl, unwrap } from "./client";
+import { ApiRequestError, CLASSIFY_MAX_UPLOAD_BYTES, classify, mediaUrl, unwrap } from "./client";
 import type { paths } from "./schema";
 
 /** Shape of an openapi-fetch result, built by hand so each case is explicit. */
@@ -88,5 +88,23 @@ describe("mediaUrl", () => {
     const live = await import("./client");
     expect(live.mediaUrl("med_1")).toBe("/api/media/med_1");
     expect(live.mediaUrl("a/../b c")).toBe("/api/media/a%2F..%2Fb%20c");
+  });
+});
+
+describe("classify wrapper", () => {
+  it("documents the 10 MB upload cap shared with the mock", () => {
+    expect(CLASSIFY_MAX_UPLOAD_BYTES).toBe(10_000_000);
+  });
+
+  it("posts multipart fields and returns ClassifyResult (mock transport)", async () => {
+    // Prefer text-only: jsdom File/FormData + Node Request can hang on file parts.
+    const result = await classify({
+      files: [],
+      text: "synthetic wrapper note",
+      url: "https://offer.example-scam.test/",
+    });
+    expect(result.outcome).toBe("new_candidate");
+    expect(result.reasons.length).toBeGreaterThan(0);
+    expect(typeof result.elapsed_ms).toBe("number");
   });
 });

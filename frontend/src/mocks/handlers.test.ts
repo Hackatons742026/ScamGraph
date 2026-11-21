@@ -63,4 +63,12 @@ describe("mock transport covers contract v1", () => {
     expect(err).toBeInstanceOf(ApiRequestError);
     expect(err).toMatchObject({ status: 422, code: "validation_error" });
   });
+
+  it("classify returns 413 when uploaded files exceed CLASSIFY_MAX_UPLOAD_BYTES", async () => {
+    const { CLASSIFY_MAX_UPLOAD_BYTES, classify } = await import("@/api/client");
+    const oversized = new File([new Uint8Array(CLASSIFY_MAX_UPLOAD_BYTES + 1)], "huge.bin", { type: "application/octet-stream" });
+    const err = await classify({ files: [oversized] }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiRequestError);
+    expect(err).toMatchObject({ status: 413, code: "payload_too_large", message: "Upload exceeds the size limit" });
+  });
 });

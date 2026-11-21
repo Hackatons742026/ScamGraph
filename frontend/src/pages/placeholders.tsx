@@ -9,14 +9,6 @@ export function Graph() {
   return (<><PageHeader title="Investigation graph" description="Links between incidents; edge style shows evidence strength." /><ComingSoon task="#5" /></>);
 }
 
-export function Classify() {
-  return (<><PageHeader title="Classify new material" description="Known Campaign, New Campaign Candidate or Needs Review, with reasons." /><ComingSoon task="#6" /></>);
-}
-
-export function Review() {
-  return (<><PageHeader title="Review queue" description="Unassigned and Needs Review incidents." /><ComingSoon task="#6" /></>);
-}
-
 export function Evaluation() {
   return (<><PageHeader title="Evaluation" description="Validation scenarios, pair metrics and leave-one-out routing." /><ComingSoon task="#8" /></>);
 }

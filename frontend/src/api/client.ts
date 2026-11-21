@@ -1,6 +1,17 @@
 import createClient from "openapi-fetch";
 import { USE_MOCKS } from "@/lib/env";
+import type { ClassifyResult } from "./types";
 import type { paths } from "./schema";
+
+/** Matches backend live classify body cap (`len(body) > 10_000_000`). */
+export const CLASSIFY_MAX_UPLOAD_BYTES = 10_000_000;
+
+export type ClassifyInput = {
+  files: File[];
+  text?: string;
+  url?: string;
+  exclude_incident?: string;
+};
 
 export const api = createClient<paths>({
   // Absolute base: Node's Request rejects relative URLs (tests). Browsers always have location.
@@ -58,4 +69,28 @@ export function mediaUrl(id: string): string {
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   }
   return `/api/media/${encodeURIComponent(id)}`;
+}
+
+/**
+ * POST /api/classify as multipart. Builds FormData and holds the only cast
+ * (generated OpenAPI body types `files` as `string[]`).
+ */
+export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
+  const fd = new FormData();
+  for (const file of input.files) {
+    fd.append("files", file);
+  }
+  const text = input.text?.trim();
+  const url = input.url?.trim();
+  if (text) fd.set("text", text);
+  if (url) fd.set("url", url);
+  if (input.exclude_incident) fd.set("exclude_incident", input.exclude_incident);
+
+  return unwrap(
+    api.POST("/api/classify", {
+      // Generated multipart schema uses files?: string[]; FormData is the runtime body.
+      body: fd as never,
+      bodySerializer: (b) => b as FormData,
+    }),
+  );
 }
