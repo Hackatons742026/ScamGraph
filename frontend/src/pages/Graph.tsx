@@ -45,7 +45,7 @@ export function Graph() {
           {(g) => (
             <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
               <div className="flex min-w-0 flex-col gap-4">
-                <GraphCanvas graph={g} selectedEdgeId={selected} onSelectEdge={setSelected} onOpenIncident={(id) => navigate(`/incidents/${encodeURIComponent(id)}`)} />
+                <GraphCanvas graph={g} selectedEdgeId={selected} onSelectEdge={setSelected} onOpenIncident={(id) => void navigate(`/incidents/${encodeURIComponent(id)}`)} />
                 <EdgeTable edges={g.edges} nodes={g.nodes} selectedId={selected} onSelect={setSelected} />
               </div>
               <div className="flex flex-col gap-4">
