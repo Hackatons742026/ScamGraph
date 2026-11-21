@@ -1,5 +1,5 @@
 # Build the frontend once, then serve its static output from the FastAPI app.
-FROM node:22-bookworm-slim AS frontend-deps
+FROM node:24-bookworm-slim AS frontend-deps
 WORKDIR /workspace/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
