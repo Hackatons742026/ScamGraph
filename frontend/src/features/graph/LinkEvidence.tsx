@@ -23,7 +23,7 @@ export function LinkEvidence({ evidence }: { evidence: EvidenceItem[] }) {
             from {e.artifact_id}
             {e.funnel_step !== null && ` · funnel step ${e.funnel_step}`}
           </span>
-          {e.ignored && <span className="text-xs text-slate-500">Ignored: {ignoreReasonLabel(e.ignore_reason) ?? "rule"}. Never creates or strengthens a link.</span>}
+          {e.ignored && <span className="text-xs text-slate-500">Ignored: {ignoreReasonLabel(e.ignore_reason) ?? "by rule"}. Never creates or strengthens a link.</span>}
         </li>
       ))}
     </ul>

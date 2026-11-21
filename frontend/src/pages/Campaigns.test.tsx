@@ -40,6 +40,17 @@ describe("Campaigns", () => {
     expect(await screen.findByRole("link", { name: c.label })).toHaveAttribute("href", `/graph?campaign=${c.id}`);
   });
 
+  it("shows first/last seen as dates and an em dash for missing dates or evidence", async () => {
+    const full = { ...campaigns[0]!, first_seen: "2026-10-30T23:59:00Z", last_seen: "2026-11-02T00:00:00Z" };
+    const bare = { ...full, id: "camp_bare", label: "Bare campaign", first_seen: null, last_seen: null, strongest_evidence: null };
+    vi.spyOn(client, "unwrap").mockResolvedValueOnce([full, bare]);
+    renderApp("/campaigns");
+    await screen.findByRole("table");
+    const cells = (label: string) => within(screen.getByRole("link", { name: label }).closest("tr")!).getAllByRole("cell").map((c) => c.textContent);
+    expect(cells(full.label).slice(4)).toEqual(["2026-10-30", "2026-11-02"]);
+    expect(cells("Bare campaign").slice(3)).toEqual(["—", "—", "—"]);
+  });
+
   it("shows empty and error states", async () => {
     vi.spyOn(client, "unwrap").mockResolvedValueOnce([]);
     const { unmount } = renderApp("/campaigns");

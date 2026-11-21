@@ -81,6 +81,14 @@ describe("Investigation graph", () => {
     expect(screen.getByText(/Select at least one tier and one level/)).toBeInTheDocument();
   });
 
+  it("filters links by level", async () => {
+    renderApp("/graph");
+    await screen.findByRole("table");
+    await userEvent.click(screen.getByRole("checkbox", { name: "network" }));
+    await waitFor(() => expect(linkRows()).toHaveLength(edges.filter((e) => e.level === "campaign").length));
+    expect(linkRows().every((r) => r.textContent?.includes("campaign"))).toBe(true);
+  });
+
   it("focuses on one campaign from a deep link", async () => {
     renderApp("/graph?campaign=camp_alpha");
     expect(await screen.findByText("Campaign Alpha", { selector: "span.font-medium" })).toBeInTheDocument();

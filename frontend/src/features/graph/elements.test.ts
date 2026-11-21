@@ -13,6 +13,7 @@ describe("edgeVisual (must match the legend)", () => {
     expect(v).toMatchObject({ lineStyle: "solid", color: FAMILY.kit.color });
     expect(v.width).toBeLessThan(6);
     expect(edgeVisual({ tier: "B", families: ["unknown_family"], low_confidence: false }).color).toBe(TIER.B.color);
+    expect(edgeVisual({ tier: "B", families: [], low_confidence: false }).color).toBe(TIER.B.color);
   });
 
   it("tier C is dashed and thinnest", () => {
@@ -38,6 +39,7 @@ describe("toElements", () => {
     edges: [
       { id: "e1", source: "i1", target: "i2", level: "network", tier: "C", families: [], score: 1, comparable: 1, low_confidence: true, evidence: [] },
       { id: "dangling", source: "i1", target: "gone", level: "campaign", tier: "A", families: [], score: 1, comparable: 3, low_confidence: false, evidence: [] },
+      { id: "dangling_src", source: "gone", target: "i2", level: "network", tier: "B", families: ["kit"], score: 1, comparable: 2, low_confidence: false, evidence: [] },
     ],
   };
   const els = toElements(graph);
@@ -47,6 +49,7 @@ describe("toElements", () => {
     expect(byId("i1")!.data.parent).toBe("camp");
     expect(byId("camp")!.data.parent).toBeUndefined();
     expect(byId("dangling")).toBeUndefined();
+    expect(byId("dangling_src")).toBeUndefined();
     expect(byId("e1")!.data).toMatchObject({ source: "i1", target: "i2", lineStyle: "dashed", color: LOW_CONFIDENCE_COLOR });
   });
 
