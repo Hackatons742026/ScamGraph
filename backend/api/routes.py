@@ -92,7 +92,7 @@ def artifact(artifact_id: str) -> ArtifactDetail:
         media = repo.list_media(artifact_id)
         return ArtifactDetail(**item.model_dump(), pages=[], redirect_chain=[], media=[Media(
             id=m["id"], kind=m["kind"] if m["kind"] in {"screenshot", "frame", "image"} else "image",
-            frame_ts=m["frame_ts"], ocr_text=None, width=0, height=0) for m in media], ocr_text=None,
+            frame_ts=m["frame_ts"], ocr_text=m["ocr_text"], width=0, height=0) for m in media], ocr_text=None,
             request_count=0, hosts_display=[])
     if artifact_id != seed.ARTIFACT.id: raise HTTPException(404, "Artifact not found")
     return seed.ARTIFACT_DETAIL
