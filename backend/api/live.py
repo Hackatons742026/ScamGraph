@@ -5,13 +5,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from backend.db import Repository
 from backend.pipeline.run import process_input, run_on_data_dir
-from backend.pipeline.models import Evidence
+from backend.pipeline.models import Evidence, IncidentBundle
 from backend.engine.linking import link_incidents
 from backend.engine.memory import classify, cluster_incidents
 from .schemas import *  # noqa: F403
@@ -28,30 +31,77 @@ def _safe_incident_label(title: str | None, index: int) -> str:
 def stable_campaign(result: object, clusters: object, incident_id: str) -> str | None: return clusters.campaign_by_incident.get(incident_id) if result.outcome == "known_campaign" else None
 def repository() -> Repository | None:
     return Repository(os.environ["SCAMGRAPH_DB"]) if os.environ.get("SCAMGRAPH_DB") else None
+
+def analysis_snapshot(repo: Repository, extra: IncidentBundle | None = None) -> tuple[
+    list[Any], list[Any], list[dict[str, Any]], Any
+]:
+    """Build a complete derived analysis snapshot, optionally including an upload."""
+    grouped: dict[str, list[Evidence]] = {row["id"]: [] for row in repo.list_incidents()}
+    for row in repo.list_evidence():
+        grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"],
+            row["value_hash"], row["display_value"], row["weight"], row["artifact_id"],
+            row["funnel_step"], bool(row["ignored"]), row["ignore_reason"]))
+    if extra is not None:
+        grouped[extra.incident.id] = extra.evidence
+
+    edges = link_incidents(grouped)
+    rejected = {
+        f"edge-{row['a_incident']}-{row['b_incident']}"
+        for row in repo.list_edges() if row.get("status") == "rejected"
+    }
+    active_edges = [edge for edge in edges if f"edge-{edge.source}-{edge.target}" not in rejected]
+    clusters = cluster_incidents(grouped, active_edges)
+    decided_at = datetime.now(timezone.utc).isoformat()
+    decisions = []
+    for identifier in grouped:
+        memory = cluster_incidents(grouped, active_edges, exclude_incident=identifier)
+        result = classify(identifier, [edge for edge in active_edges if identifier in {edge.source, edge.target}],
+            memory, coverage_ok=bool(grouped[identifier]), exclude_incident=identifier)
+        decisions.append({"incident_id": identifier, "outcome": result.outcome,
+            "campaign_id": stable_campaign(result, clusters, identifier),
+            "reasons": list(result.reasons), "decided_at": decided_at})
+    return edges, [*clusters.networks, *clusters.campaigns], decisions, clusters
+
+def persist_upload(repo: Repository, bundle: IncidentBundle) -> None:
+    """Store an uploaded incident and its refreshed analysis in one transaction."""
+    repo.save_uploaded_bundle(bundle, lambda: analysis_snapshot(repo, bundle)[:3])
+
+def discard_failed_upload(repo: Repository, bundle: IncidentBundle) -> None:
+    """Remove this request's unindexed cache files after a database failure."""
+    cache_root = Path(os.environ.get("SCAMGRAPH_CACHE_DIR") or "data/cache").resolve()
+    classify_root = (cache_root / "classify").resolve()
+    folder = Path(bundle.incident.folder).resolve()
+    if folder.is_relative_to(classify_root) and folder.is_dir():
+        parent = folder.parent
+        shutil.rmtree(folder, ignore_errors=True)
+        if parent.is_relative_to(classify_root):
+            try:
+                parent.rmdir()
+            except OSError:
+                pass
+    for media in bundle.media:
+        if not media.path or repo.media_path_in_use(media.path):
+            continue
+        raw = Path(media.path)
+        candidate = raw if raw.is_absolute() else cache_root / raw
+        resolved = candidate.resolve()
+        if resolved.is_relative_to(cache_root) and resolved.is_file():
+            try:
+                resolved.unlink()
+            except OSError:
+                pass
+
 def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     started = datetime.now(timezone.utc).isoformat()
     try:
         repo.save_run(run_id, "running", started)
         summary = run_on_data_dir(data_dir, db_path=repo.path)
         repo.delete_run(summary["run_id"])
-        grouped: dict[str, list[Evidence]] = {row["id"]: [] for row in repo.list_incidents()}
-        for row in repo.list_evidence():
-            grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"],
-                row["value_hash"], row["display_value"], row["weight"], row["artifact_id"],
-                row["funnel_step"], bool(row["ignored"]), row["ignore_reason"]))
-        edges = link_incidents(grouped)
-        clusters = cluster_incidents(grouped, edges)
-        now = datetime.now(timezone.utc).isoformat()
-        decisions = []
-        for identifier in grouped:
-            memory = cluster_incidents(grouped, edges, exclude_incident=identifier)
-            result = classify(identifier, [e for e in edges if identifier in {e.source, e.target}],
-                memory, coverage_ok=bool(grouped[identifier]), exclude_incident=identifier)
-            decisions.append({"incident_id": identifier, "outcome": result.outcome, "campaign_id": stable_campaign(result, clusters, identifier),
-                "reasons": list(result.reasons), "decided_at": now})
-        repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns], decisions)
+        edges, campaigns, decisions, clusters = analysis_snapshot(repo)
+        repo.save_analysis(edges, campaigns, decisions)
         stats: dict[str, dict[str, int]] = {}
-        for identifier in grouped:
+        for row in repo.list_incidents():
+            identifier = row["id"]
             for item in repo.get_artifacts(identifier):
                 value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0})
                 value["total"] += 1; value["failed" if item["parse_status"] == "failed" else "parsed"] += 1
@@ -190,12 +240,18 @@ def campaign(repo: Repository, row: dict, groups: dict | None = None) -> Campaig
         strongest_evidence=evidence(strongest) if strongest else None,
         network_id=groups["network_by_campaign"].get(row["id"]))
 def safe_media_path(row: dict) -> Path:
-    path = Path(row.get("path") or "").resolve()
     roots = [Path(value).resolve() for key in ("SCAMGRAPH_DATA_DIR", "SCAMGRAPH_CACHE_DIR")
              if (value := os.environ.get(key))]
-    if not path.is_file() or not any(path.is_relative_to(root) for root in roots):
+    raw_path = row.get("path")
+    if not raw_path:
         raise FileNotFoundError
-    return path
+    path = Path(raw_path)
+    candidates = [(root, path if path.is_absolute() else root / path) for root in roots]
+    for root, candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.is_file() and resolved.is_relative_to(root):
+            return resolved
+    raise FileNotFoundError
 def classify_multipart(repo: Repository, body: bytes, content_type: str,
                        exclude: str | None = None) -> tuple[object, object, list]:
     if len(body) > 10_000_000: raise OverflowError
@@ -217,14 +273,27 @@ def classify_multipart(repo: Repository, body: bytes, content_type: str,
                 if name.group(1) == b"text": text = value.decode(errors="replace")
                 else: url = value.decode(errors="replace")
         bundle = process_input(paths, text, url)
+    # `process_input` intentionally gives its temporary folder a generic name;
+    # assign every live upload a fresh resource id before storing it.
+    bundle.incident.id = f"inc_{uuid.uuid4().hex[:12]}"
+    bundle.incident.title = "Uploaded material"
+    for item in bundle.artifacts:
+        item.incident_id = bundle.incident.id
+    for item in bundle.incident.artifacts:
+        item.incident_id = bundle.incident.id
     grouped: dict[str, list[Evidence]] = {row["id"]: [] for row in repo.list_incidents()}
     for row in repo.list_evidence():
         grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"],
             row["value_hash"], row["display_value"], row["weight"], row["artifact_id"], row["funnel_step"]))
     edges = link_incidents({**grouped, bundle.incident.id: bundle.evidence})
-    memory = cluster_incidents(grouped, [e for e in edges if bundle.incident.id not in {e.source, e.target}],
+    rejected = {
+        f"edge-{row['a_incident']}-{row['b_incident']}"
+        for row in repo.list_edges() if row.get("status") == "rejected"
+    }
+    active_edges = [edge for edge in edges if f"edge-{edge.source}-{edge.target}" not in rejected]
+    memory = cluster_incidents(grouped, [e for e in active_edges if bundle.incident.id not in {e.source, e.target}],
                                exclude_incident=exclude)
-    candidate = [e for e in edges if bundle.incident.id in {e.source, e.target}]
+    candidate = [e for e in active_edges if bundle.incident.id in {e.source, e.target}]
     result = classify(bundle.incident.id, candidate, memory,
         coverage_ok=bool(bundle.coverage.kinds_present), exclude_incident=exclude)
     return result, bundle, candidate

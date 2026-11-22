@@ -1,7 +1,8 @@
 """Contract-v1 endpoints backed by synthetic seed objects."""
 
-import re
+import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -23,6 +24,7 @@ from backend.eval import build_report
 
 ERRORS = {code: {"model": ErrorResponse} for code in (404, 413, 422, 501)}
 router = APIRouter(prefix="/api", responses=ERRORS)
+logger = logging.getLogger(__name__)
 
 @router.post("/import", response_model=ImportAccepted, status_code=202)
 def start_import(background: BackgroundTasks, _request: ImportRequest | None = None) -> ImportAccepted:
@@ -194,10 +196,20 @@ async def classify(_request: Request) -> ClassifyResult:
         raise HTTPException(422, "At least one file, text, or URL is required")
     if repo := live.repository():
         excluded = re.search(rb'name="exclude_incident"[^\r\n]*\r\n\r\n(.*?)(?=\r\n--)', body, re.DOTALL)
-        try: result, bundle, candidates = live.classify_multipart(repo, body, content_type,
-            excluded.group(1).decode() if excluded else None)
+        excluded_incident = excluded.group(1).decode() if excluded else None
+        try: result, bundle, candidates = live.classify_multipart(repo, body, content_type, excluded_incident)
         except OverflowError: raise HTTPException(413, "Upload exceeds the size limit")
         except ValueError: raise HTTPException(422, "Invalid multipart body")
+        if not excluded_incident:
+            try:
+                live.persist_upload(repo, bundle)
+            except Exception as exc:  # Keep uploaded filenames and local paths out of API errors/logs.
+                try:
+                    live.discard_failed_upload(repo, bundle)
+                except Exception as cleanup_exc:
+                    logger.warning("upload cache cleanup skipped (%s)", type(cleanup_exc).__name__)
+                logger.error("uploaded incident could not be saved (%s)", type(exc).__name__)
+                raise HTTPException(500, "Uploaded material could not be saved for future analysis") from None
         items = [EvidenceItem(id=f"candidate-{i}", type=e.type, tier=e.tier, family=e.family,
             display=e.display, weight=e.weight, artifact_id=e.artifact_id or "",
             funnel_step=e.funnel_step, ignored=e.ignored, ignore_reason=e.ignore_reason)
