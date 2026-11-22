@@ -54,9 +54,55 @@ The app volume stores only its DB/cache state. The default demo does not mount
 the host `data/` directory and leaves import disabled until an input directory
 is explicitly mounted and configured.
 
-For a controlled data import, create a separate Compose override that mounts the
-approved input directory read-only at `/data`, sets `SCAMGRAPH_DATA_DIR=/data`,
-sets `SCAMGRAPH_DB` to a path in the state volume, and supplies a private stable
-`SCAMGRAPH_SALT`. Do not add the input directory, override containing secrets,
-or database to the repository or Docker image. Keep the synthetic demo volume
-separate from any live-data environment.
+## Import a local dataset
+
+Use the separate `compose.live.yaml` stack for real local data. It mounts the
+input directory read-only at `/data`, sets `SCAMGRAPH_DATA_DIR=/data`, requires
+a stable private salt, and writes results to a dedicated `scamgraph-live-state`
+volume scoped by a required live project name. Use the same name for this
+dataset on later runs and a different name for another dataset. It does not
+seed or reuse the synthetic demo database. The live UI uses port `8001` by
+default; the synthetic demo can remain on `8000`.
+
+Set `SCAMGRAPH_DATA_HOST_PATH` to the dataset folder's absolute path. If
+`do_udostepnienia` is directly inside the project, run this from the repository
+root; otherwise replace the path with the folder's actual location:
+
+```bash
+export SCAMGRAPH_DATA_HOST_PATH="$PWD/do_udostepnienia"
+export SCAMGRAPH_LIVE_PROJECT_NAME=scamgraph-live-do-udostepnienia
+if [ ! -d "$SCAMGRAPH_DATA_HOST_PATH" ]; then
+  echo "Dataset directory not found: $SCAMGRAPH_DATA_HOST_PATH"
+fi
+openssl rand -hex 32
+# Save this value privately; set the same value in the next line and on future runs.
+export SCAMGRAPH_SALT='paste-the-generated-private-value-here'
+if [ -d "$SCAMGRAPH_DATA_HOST_PATH" ]; then
+  docker compose -f compose.live.yaml up --build -d
+fi
+```
+
+The app exposes port `8001` only on this computer. Keep the same salt for future
+runs against this dataset and keep `SCAMGRAPH_LIVE_PROJECT_NAME` stable to reuse
+its database. Do not commit the salt, the dataset, or generated database files.
+The input mount is read-only; the app stores only its analysis database and
+cache in the separate named volume. On macOS, Docker Desktop must be allowed to
+share the selected folder, and its files must be readable. In a new terminal,
+export the same three variables again before running any Compose command,
+including `ps` or `down`.
+
+Open <http://localhost:8001>, go to **Overview**, then click **Run import**.
+The UI polls the run status and refreshes the live views when processing
+finishes. Confirm the container is healthy with:
+
+```bash
+docker compose -f compose.live.yaml ps
+```
+
+To stop the live stack and keep its database for the next session:
+
+```bash
+docker compose -f compose.live.yaml down
+```
+
+Do not use `down -v` unless you intend to erase the live analysis database.
