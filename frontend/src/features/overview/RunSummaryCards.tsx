@@ -1,16 +1,27 @@
+import { Link } from "react-router";
 import type { RunSummary } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RUN_STATUS } from "@/lib/domain";
 
-const STATS: Array<{ key: keyof Pick<RunSummary, "incidents" | "artifacts" | "campaigns" | "networks" | "unassigned" | "needs_review" | "new_candidates">; label: string }> = [
-  { key: "incidents", label: "Incidents" },
+type StatKey = keyof Pick<
+  RunSummary,
+  "incidents" | "artifacts" | "campaigns" | "networks" | "unassigned" | "needs_review" | "new_candidates"
+>;
+
+const STATS: Array<{ key: StatKey; label: string; hint?: string; to?: string }> = [
+  { key: "incidents", label: "Incidents", to: "/incidents" },
   { key: "artifacts", label: "Artifacts" },
-  { key: "campaigns", label: "Campaigns" },
-  { key: "networks", label: "Networks" },
-  { key: "unassigned", label: "Unassigned" },
-  { key: "needs_review", label: "Needs review" },
-  { key: "new_candidates", label: "New candidates" },
+  { key: "campaigns", label: "Campaigns", to: "/campaigns" },
+  { key: "networks", label: "Networks", to: "/campaigns" },
+  {
+    key: "unassigned",
+    label: "Outside campaigns",
+    hint: "Not in a campaign — often New Candidate",
+    to: "/incidents?status=new_candidate",
+  },
+  { key: "needs_review", label: "Needs review", to: "/review" },
+  { key: "new_candidates", label: "New candidates", to: "/incidents?status=new_candidate" },
 ];
 
 function statusVariant(status: RunSummary["status"]) {
@@ -41,12 +52,29 @@ export function RunSummaryCards({ run }: { run: RunSummary }) {
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-            {STATS.map(({ key, label }) => (
-              <div key={key} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                <dt className="text-xs text-slate-500">{label}</dt>
-                <dd className="text-lg font-semibold tabular-nums text-slate-900">{run[key]}</dd>
-              </div>
-            ))}
+            {STATS.map(({ key, label, hint, to }) => {
+              const value = (
+                <>
+                  <dt className="text-xs text-slate-500">{label}</dt>
+                  <dd className="text-lg font-semibold tabular-nums text-slate-900">{run[key]}</dd>
+                  {hint && <p className="mt-0.5 text-[10px] leading-tight text-slate-400">{hint}</p>}
+                </>
+              );
+              return (
+                <div key={key} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                  {to ? (
+                    <Link
+                      to={to}
+                      className="block rounded-sm outline-none ring-slate-400 hover:bg-slate-100/80 focus-visible:ring-2"
+                    >
+                      {value}
+                    </Link>
+                  ) : (
+                    value
+                  )}
+                </div>
+              );
+            })}
           </dl>
           <p className="mt-3 text-xs text-slate-500">
             {run.unique_artifacts} unique · {run.duplicates} duplicates · {run.secrets_redacted} secrets redacted

@@ -7,7 +7,16 @@ import { type LooReport, pct } from "./types";
 /** Leave-one-out routing: each incident is removed, memory rebuilt, and the incident classified against the rest.
  *  Only cases that are imported incidents link to their page; synthetic evaluation cases stay plain text. */
 /** `incidentLabels` is null while the incident list is unknown (loading or failed): then no case is called synthetic. */
-export function LooRouting({ loo, incidentLabels }: { loo: LooReport; incidentLabels: ReadonlyMap<string, string> | null }) {
+export function LooRouting({
+  loo,
+  incidentLabels,
+  synthetic = false,
+}: {
+  loo: LooReport;
+  incidentLabels: ReadonlyMap<string, string> | null;
+  /** When true, accuracy is from synthetic fixtures — not imported data. */
+  synthetic?: boolean;
+}) {
   if (!loo.rows.length) return <p className="text-sm text-slate-500">No leave-one-out routing in this report.</p>;
   const { labels, matrix } = loo.confusion;
   const correct = loo.rows.filter((r) => r.correct).length;
@@ -16,6 +25,11 @@ export function LooRouting({ loo, incidentLabels }: { loo: LooReport; incidentLa
       <p className="text-sm text-slate-700">
         Routing accuracy <span className="font-semibold tabular-nums">{pct(loo.accuracy)}</span>
         <span className="text-slate-500"> ({correct} of {loo.rows.length} incidents routed to the expected outcome)</span>
+        {synthetic && (
+          <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900">
+            synthetic fixtures
+          </span>
+        )}
       </p>
       <table className="w-fit text-sm" aria-label="Confusion matrix">
         <caption className="mb-1 text-left text-xs text-slate-500">Rows: expected outcome · columns: predicted outcome</caption>

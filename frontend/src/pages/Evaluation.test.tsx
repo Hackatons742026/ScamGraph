@@ -72,7 +72,10 @@ describe("Evaluation", () => {
     };
     stubReport(async () => live);
     renderApp("/evaluation");
-    expect(await screen.findByText(/Not from a labelled evaluation run/)).toHaveAttribute("role", "note");
+    expect(await screen.findByText(/Not a labelled evaluation of your imported dataset/)).toHaveAttribute(
+      "role",
+      "note",
+    );
 
     const pairs = section("Pair metrics");
     expect(pairs).toHaveTextContent("False merges: not measured");
@@ -88,6 +91,8 @@ describe("Evaluation", () => {
     expect(scenarios).not.toHaveTextContent("known_campaign");
 
     const loo = section("Leave-one-out routing");
+    expect(loo).toHaveTextContent(/Synthetic fixtures only/);
+    expect(within(loo).getByText("synthetic fixtures")).toBeInTheDocument();
     expect(within(loo).getByText("loo-synthetic-a")).toBeInTheDocument();
     expect(within(loo).queryByRole("link")).not.toBeInTheDocument();
   });

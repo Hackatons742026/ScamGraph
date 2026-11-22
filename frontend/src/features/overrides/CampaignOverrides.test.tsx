@@ -43,7 +43,7 @@ describe("Campaign merge and split overrides", () => {
     await userEvent.click(screen.getByRole("button", { name: /Merge selected/ }));
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(within(dialog).getByRole("button", { name: "Merge" }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/501/);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/not enabled on this server/i);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
@@ -75,6 +75,6 @@ describe("Campaign merge and split overrides", () => {
     await within(dialog).findByText("Synthetic incident Alpha-1");
     await userEvent.click(within(dialog).getByRole("checkbox", { name: "Synthetic incident Alpha-1" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Split" }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/not_implemented|core freeze|501/i);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/not enabled on this server/i);
   });
 });

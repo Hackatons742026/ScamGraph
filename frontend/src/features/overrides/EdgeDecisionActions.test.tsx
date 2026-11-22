@@ -48,8 +48,8 @@ describe("EdgeDecisionActions", () => {
     );
     renderActions(MOCK_EDGE_FAIL_ID);
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Analyst overrides are enabled after core freeze/);
-    expect(screen.getByRole("alert")).toHaveTextContent(/501/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not enabled on this server/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/not enabled on this server/i);
   });
 
   it("surfaces ApiRequestError from unwrap without a detail", async () => {

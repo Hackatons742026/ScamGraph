@@ -55,6 +55,18 @@ describe("Review queue page", () => {
     expect(await screen.findByText(/No incidents need review/i)).toBeInTheDocument();
   });
 
+  it("empty state links to New Candidates when some exist outside the queue", async () => {
+    const candidates = incidents.filter((i) => i.status === "new_candidate");
+    expect(candidates.length).toBeGreaterThan(0);
+    vi.spyOn(client, "unwrap")
+      .mockResolvedValueOnce([]) // review queue
+      .mockResolvedValueOnce(candidates); // new_candidate count query
+    renderApp("/review");
+    expect(await screen.findByText(/No incidents need review/i)).toBeInTheDocument();
+    const cta = await screen.findByRole("link", { name: /open New Candidates in Incidents/i });
+    expect(cta).toHaveAttribute("href", "/incidents?status=new_candidate");
+  });
+
   it("shows an error state when the API fails", async () => {
     vi.spyOn(client, "unwrap").mockRejectedValueOnce(
       new ApiRequestError(503, { error: "unavailable", detail: "Review queue unavailable" }),
