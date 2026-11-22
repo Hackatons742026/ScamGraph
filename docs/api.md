@@ -2,8 +2,10 @@
 
 Run `uvicorn backend.api.main:app --host 127.0.0.1 --port 8000` from the
 repository root. Set `SCAMGRAPH_DB` to enable live reads; set
-`SCAMGRAPH_DATA_DIR` as well to import data. `SCAMGRAPH_SALT` is required by
-pipeline operations and `SCAMGRAPH_CACHE_DIR` controls generated media. Without
+`SCAMGRAPH_DATA_DIR` as well for batch imports. `SCAMGRAPH_SALT` is required by
+pipeline operations and `SCAMGRAPH_CACHE_DIR` controls generated media. Live
+Classify uploads require `SCAMGRAPH_DB`, `SCAMGRAPH_SALT`, and a writable cache,
+but do not require a source dataset directory. Without
 `SCAMGRAPH_DB`, read endpoints return deterministic synthetic demo fixtures;
 `POST /api/import` in this mode returns the demo run and does not import files.
 
@@ -20,7 +22,7 @@ pipeline operations and `SCAMGRAPH_CACHE_DIR` controls generated media. Without
 | `GET /api/campaigns` / `GET /api/campaigns/{id}` | Campaign summaries or details |
 | `GET /api/campaigns/{id}/links` | Campaign link projection |
 | `GET /api/graph` | Graph nodes and edges; optional `campaign`, comma-separated `tiers`, and `levels` filters |
-| `POST /api/classify` | Classify a multipart upload, text, or URL against stored memory |
+| `POST /api/classify` | Analyze a multipart upload, text, or URL against stored memory; live submissions are saved for future comparison |
 | `GET /api/eval/report` | Deterministic synthetic scenarios and report contract |
 | `POST /api/edges/{edge_id}/decision` | Record an analyst's confirm/reject decision for a stored edge |
 | `POST /api/campaigns/merge` | Merge two or more campaign groups, preserving their incident membership |
@@ -35,6 +37,14 @@ database. They persist changes and audit records; rejecting an edge removes it
 from graph and incident projections. In synthetic mode they return HTTP 501.
 Campaign merge/split accepts an optional note; notes are capped at 500
 characters and stored only in the local audit log.
+
+In live mode, a normal classify request is stored as a new incident with its
+parsed artifacts, evidence, and media in the app-managed cache and database.
+The API rebuilds links, campaigns, and decisions before returning, so later
+classify requests compare against earlier uploads and the new incident appears
+in live views. Supplying `exclude_incident` runs leave-one-out analysis and does
+not save another incident. Without a live database, classify returns a
+deterministic demo response and does not store the submitted material.
 
 ## Campaign exports
 

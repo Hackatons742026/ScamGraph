@@ -14,12 +14,7 @@ services:
       - "127.0.0.1:${SCAMGRAPH_LIVE_PORT:-8001}:8000"
     volumes:
       - scamgraph-live-state:/var/lib/scamgraph-live
-      - type: bind
-        source: ${SCAMGRAPH_DATA_HOST_PATH:?Set SCAMGRAPH_DATA_HOST_PATH to the dataset folder}
-        target: /data
-        read_only: true
-        bind:
-          create_host_path: false
+      - scamgraph-live-input:/data
     healthcheck:
       test:
         - CMD
@@ -33,3 +28,4 @@ services:
 
 volumes:
   scamgraph-live-state:
+  scamgraph-live-input:
