@@ -90,6 +90,21 @@ describe("Classify page", () => {
     expect(screen.getByRole("link", { name: known.campaign_label! })).toHaveAttribute("href", "/campaigns");
   });
 
+  it("mock mode says the result is synthetic and nothing was saved", async () => {
+    const spy = vi.spyOn(client, "classify").mockResolvedValue(classifyResult("new_candidate"));
+    renderApp("/classify");
+    await screen.findByLabelText(/Leave one out/i);
+    expect(screen.getByText(/Mock mode: results come from synthetic data and nothing is saved/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/Pasted text/i), "synthetic note");
+    await userEvent.click(screen.getByRole("button", { name: /^Classify$/i }));
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    const status = await screen.findByText(/Demo mode: nothing was saved/);
+    expect(status.closest("[role=status]")).toHaveTextContent(/later uploads are not compared with it/);
+    expect(screen.queryByText(/Saved to live memory/)).not.toBeInTheDocument();
+  });
+
   it("surfaces ApiRequestError for oversized uploads (413)", async () => {
     vi.spyOn(client, "classify").mockRejectedValue(
       new ApiRequestError(413, { error: "payload_too_large", detail: "Upload exceeds the size limit" }),
