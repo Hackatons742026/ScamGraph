@@ -86,8 +86,19 @@ def campaign_export_projection(repo: Repository, campaign_id: str) -> dict:
             "comparable": row["comparable"],
         })
 
-    timestamps = [item[key] for item in incidents for key in ("first_seen", "last_seen") if item[key]]
-    export_date = min(timestamps)[:10] if timestamps else datetime.now(timezone.utc).date().isoformat()
+    timestamps = []
+    for item in incidents:
+        for key in ("first_seen", "last_seen"):
+            value = item[key]
+            if not value:
+                continue
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                continue
+            if parsed.tzinfo is not None:
+                timestamps.append(parsed.astimezone(timezone.utc))
+    export_date = min(timestamps).date().isoformat() if timestamps else None
     campaign_ref = _ref("campaign", campaign_id, salt)
     return {
         "campaign_ref": campaign_ref,

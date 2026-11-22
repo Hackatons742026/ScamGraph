@@ -98,6 +98,7 @@ def test_campaign_merge_and_split_change_persisted_memberships(live_overrides):
     merged = client.post("/api/campaigns/merge", json={"campaign_ids": ["camp-a", "camp-b"], "note": "synthetic merge"})
     assert merged.status_code == 200
     assert merged.json()["id"] == "camp-a"
+    assert merged.json()["membership_source"] == "manual"
     assert {member["id"] for member in merged.json()["members"]} == {"inc-a", "inc-b", "inc-c", "inc-d"}
     assert client.get("/api/campaigns/camp-b").status_code == 404
     assert {row["incident_id"] for row in live_overrides.list_membership() if row["campaign_id"] == "camp-a"} == {
@@ -110,6 +111,7 @@ def test_campaign_merge_and_split_change_persisted_memberships(live_overrides):
     })
     assert split.status_code == 200 and len(split.json()) == 2
     original, separated = split.json()
+    assert original["membership_source"] == separated["membership_source"] == "manual"
     assert original["id"] == "camp-a" and {row["id"] for row in original["members"]} == {"inc-a", "inc-d"}
     assert separated["id"].startswith("campaign-override-")
     assert {row["id"] for row in separated["members"]} == {"inc-b", "inc-c"}
@@ -124,6 +126,7 @@ def test_campaign_merge_and_split_change_persisted_memberships(live_overrides):
         Campaign("camp-a", "campaign", ("inc-a", "inc-b"), (), ()),
         Campaign("camp-b", "campaign", ("inc-c", "inc-d"), (), ()),
     ])
+    assert all(item["membership_source"] == "manual" for item in client.get("/api/campaigns").json())
     rows = {row["id"]: row for row in live_overrides.list_edges()}
     assert rows["edge-inc-c-inc-d"]["status"] == "rejected"
     assert rows["edge-inc-c-inc-d"]["analyst_override"]["note"] == "synthetic reject before merge"

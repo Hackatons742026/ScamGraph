@@ -16,3 +16,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
 def init_db(path: str | Path) -> None:
     with connect(path) as connection:
         connection.executescript(SCHEMA.read_text(encoding="utf-8"))
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(incidents)")}
+        if "ingested_at" not in columns:
+            # Legacy ingestion time is unknown; do not infer it from another timestamp.
+            connection.execute("ALTER TABLE incidents ADD COLUMN ingested_at TEXT")

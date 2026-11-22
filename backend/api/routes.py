@@ -1,8 +1,10 @@
 """Contract-v1 endpoints backed by synthetic seed objects."""
 
 import logging
+from math import ceil
 import os
 import re
+from time import perf_counter
 import uuid
 from datetime import datetime, timezone
 
@@ -192,6 +194,7 @@ MULTIPART = {"requestBody": {"content": {"multipart/form-data": {"schema": {
 
 @router.post("/classify", response_model=ClassifyResult, openapi_extra=MULTIPART)
 async def classify(_request: Request) -> ClassifyResult:
+    started = perf_counter()
     body = await _request.body()
     content_type = _request.headers.get("content-type", "")
     values = re.findall(rb'name="(?:files|text|url)"[^\r\n]*\r\n(?:[^\r\n]*\r\n)*\r\n(.*?)(?=\r\n--)', body, re.DOTALL)
@@ -224,11 +227,13 @@ async def classify(_request: Request) -> ClassifyResult:
             coverage=live.coverage(__import__("json").dumps(bundle.coverage.to_dict())), evidence=items,
             candidate_edges=[Edge(id=f"candidate-{i}", source=e.source, target=e.target,
                 level=e.level, tier=e.tier, families=list(e.families), score=e.score,
-                comparable=e.comparable, low_confidence=e.low_confidence, evidence=[]) for i, e in enumerate(candidates)], elapsed_ms=0)
+                comparable=e.comparable, low_confidence=e.low_confidence, evidence=[]) for i, e in enumerate(candidates)],
+            elapsed_ms=max(1, ceil((perf_counter() - started) * 1000)))
     reason = Reason(kind="match", text="Synthetic tier-A campaign match.", evidence=[seed.EVIDENCE])
     return ClassifyResult(outcome="known_campaign", campaign_id=seed.CAMPAIGN.id,
         campaign_label=seed.CAMPAIGN.label, reasons=[reason], coverage=seed.COVERAGE,
-        evidence=[seed.EVIDENCE], candidate_edges=[seed.EDGE], elapsed_ms=1)
+        evidence=[seed.EVIDENCE], candidate_edges=[seed.EDGE],
+        elapsed_ms=max(1, ceil((perf_counter() - started) * 1000)))
 
 @router.get("/eval/report", response_model=EvalReport)
 def evaluation() -> EvalReport:

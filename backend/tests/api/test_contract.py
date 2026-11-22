@@ -76,6 +76,9 @@ def test_openapi_paths_named_components_and_multipart():
         "EvalReport", "EdgeDecisionRequest", "EdgeDecisionResponse", "MergeRequest", "SplitRequest",
         "ErrorResponse"}
     assert paths <= set(schema["paths"]) and components <= set(schema["components"]["schemas"])
+    incident_props = schema["components"]["schemas"]["IncidentSummary"]["properties"]
+    campaign_props = schema["components"]["schemas"]["CampaignSummary"]["properties"]
+    assert "ingested_at" in incident_props and "membership_source" in campaign_props
     assert "application/json" in schema["paths"]["/api/import"]["post"]["requestBody"]["content"]
     multipart = schema["paths"]["/api/classify"]["post"]["requestBody"]["content"]
     assert multipart["multipart/form-data"]["schema"]["properties"]["files"]["items"]["format"] == "binary"

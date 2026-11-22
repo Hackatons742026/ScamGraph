@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE TABLE IF NOT EXISTS incidents (
   id TEXT PRIMARY KEY, folder TEXT NOT NULL, title TEXT, first_seen TEXT,
-  last_seen TEXT, coverage_json TEXT NOT NULL DEFAULT '{}', status TEXT
+  last_seen TEXT, coverage_json TEXT NOT NULL DEFAULT '{}', status TEXT,
+  ingested_at TEXT
 );
 CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY, incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
