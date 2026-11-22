@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import json
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
+import uuid
 
 from backend.pipeline.models import Artifact, Evidence, Incident, MediaRef
 
@@ -151,6 +152,95 @@ class Repository:
     def list_membership(self) -> list[dict[str, Any]]:
         with self._connection() as db:
             return [dict(row) for row in db.execute("SELECT * FROM membership ORDER BY campaign_id,incident_id")]
+
+    def record_edge_decision(self, edge_id: str, decision: str, note: str | None = None) -> str | None:
+        """Persist an analyst's decision for a stored edge and return its timestamp."""
+        recorded_at = datetime.now(timezone.utc).isoformat()
+        edge_status = "confirmed" if decision == "confirm" else "rejected"
+        detail = {"decision": decision}
+        if note:
+            detail["note"] = note
+        with self._connection() as db:
+            if db.execute("SELECT 1 FROM edges WHERE id=?", (edge_id,)).fetchone() is None:
+                return None
+            db.execute("UPDATE edges SET status=? WHERE id=?", (edge_status, edge_id))
+            db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
+                (recorded_at, f"edge.{decision}", edge_id, json.dumps(detail)))
+        return recorded_at
+
+    def merge_campaigns(self, campaign_ids: list[str], note: str | None = None) -> str:
+        """Merge campaign memberships into the first selected campaign atomically."""
+        identifiers = list(campaign_ids)
+        if len(identifiers) < 2 or len(set(identifiers)) != len(identifiers):
+            raise ValueError("Select at least two distinct campaigns")
+        placeholders = ",".join("?" for _ in identifiers)
+        with self._connection() as db:
+            rows = db.execute(
+                f"SELECT id,level FROM campaigns WHERE id IN ({placeholders})", identifiers
+            ).fetchall()
+            if len(rows) != len(identifiers):
+                raise KeyError("Campaign not found")
+            if any(row["level"] != "campaign" for row in rows):
+                raise ValueError("Only campaign-level groups can be merged")
+
+            target = identifiers[0]
+            members = sorted({row["incident_id"] for row in db.execute(
+                f"SELECT incident_id FROM membership WHERE campaign_id IN ({placeholders})", identifiers
+            )})
+            sources = identifiers[1:]
+            if not members:
+                raise ValueError("Selected campaigns have no members")
+
+            db.execute(f"DELETE FROM membership WHERE campaign_id IN ({placeholders})", identifiers)
+            db.executemany("INSERT INTO membership (campaign_id,incident_id,reason_json) VALUES (?,?,?)",
+                [(target, incident_id, "{}") for incident_id in members])
+            source_placeholders = ",".join("?" for _ in sources)
+            db.execute(f"UPDATE decisions SET campaign_id=? WHERE campaign_id IN ({source_placeholders})",
+                (target, *sources))
+            db.execute(f"DELETE FROM campaigns WHERE id IN ({source_placeholders})", sources)
+
+            detail = {"campaign_ids": identifiers, "incident_ids": members}
+            if note:
+                detail["note"] = note
+            db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
+                (datetime.now(timezone.utc).isoformat(), "campaign.merge", target, json.dumps(detail)))
+        return target
+
+    def split_campaign(self, campaign_id: str, incident_ids: list[str], note: str | None = None) -> tuple[str, str]:
+        """Move a proper subset of a campaign's members into a new campaign atomically."""
+        selected = list(incident_ids)
+        if not selected or len(set(selected)) != len(selected):
+            raise ValueError("Select one or more distinct incidents")
+        new_campaign_id = f"campaign-override-{uuid.uuid4().hex[:12]}"
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+            if row is None:
+                raise KeyError("Campaign not found")
+            if row["level"] != "campaign":
+                raise ValueError("Only campaign-level groups can be split")
+            members = {item["incident_id"] for item in db.execute(
+                "SELECT incident_id FROM membership WHERE campaign_id=?", (campaign_id,)
+            )}
+            selected_set = set(selected)
+            if not selected_set <= members:
+                raise KeyError("Incident not found in this campaign")
+            if len(selected_set) >= len(members):
+                raise ValueError("Leave at least one incident in the original campaign")
+
+            db.execute("INSERT INTO campaigns (id,level,label,profile_json,first_seen,last_seen) VALUES (?,?,?,?,?,?)",
+                (new_campaign_id, "campaign", new_campaign_id, row["profile_json"], None, None))
+            placeholders = ",".join("?" for _ in selected)
+            db.execute(f"UPDATE membership SET campaign_id=? WHERE campaign_id=? AND incident_id IN ({placeholders})",
+                (new_campaign_id, campaign_id, *selected))
+            db.execute(f"UPDATE decisions SET campaign_id=? WHERE campaign_id=? AND incident_id IN ({placeholders})",
+                (new_campaign_id, campaign_id, *selected))
+
+            detail = {"new_campaign_id": new_campaign_id, "incident_ids": selected}
+            if note:
+                detail["note"] = note
+            db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
+                (datetime.now(timezone.utc).isoformat(), "campaign.split", campaign_id, json.dumps(detail)))
+        return campaign_id, new_campaign_id
 
     def save_analysis(self, edges: Iterable[Any], campaigns: Iterable[Any],
                       decisions: Iterable[dict[str, Any]] = ()) -> None:
