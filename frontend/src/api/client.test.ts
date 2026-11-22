@@ -1,6 +1,6 @@
 import createClient from "openapi-fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiRequestError, CLASSIFY_MAX_UPLOAD_BYTES, classify, mediaUrl, unwrap } from "./client";
+import { ApiRequestError, CLASSIFY_MAX_FILE_BYTES, CLASSIFY_MAX_UPLOAD_BYTES, classify, mediaUrl, unwrap } from "./client";
 import type { paths } from "./schema";
 
 /** Shape of an openapi-fetch result, built by hand so each case is explicit. */
@@ -92,8 +92,9 @@ describe("mediaUrl", () => {
 });
 
 describe("classify wrapper", () => {
-  it("documents the 10 MB upload cap shared with the mock", () => {
-    expect(CLASSIFY_MAX_UPLOAD_BYTES).toBe(10_000_000);
+  it("matches the server's default upload limits (50 MB per file, 100 MB per request)", () => {
+    expect(CLASSIFY_MAX_FILE_BYTES).toBe(50 * 1024 * 1024);
+    expect(CLASSIFY_MAX_UPLOAD_BYTES).toBe(100 * 1024 * 1024);
   });
 
   it("posts multipart fields and returns ClassifyResult (mock transport)", async () => {

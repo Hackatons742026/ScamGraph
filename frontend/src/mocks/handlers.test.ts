@@ -2,7 +2,7 @@
 // Node env: jsdom's File/FormData can't be serialised by Node's native Request (multipart with files hangs).
 import { describe, expect, it } from "vitest";
 import { api, ApiRequestError, unwrap } from "@/api/client";
-import { mockFetch } from "./handlers";
+import { mockFetch, oversizedUpload } from "./handlers";
 import { MOCK_CAMPAIGN_FAIL_ID, MOCK_EDGE_FAIL_ID } from "./sentinels";
 
 describe("mock transport covers contract v1", () => {
@@ -125,11 +125,10 @@ describe("mock transport covers contract v1", () => {
     expect(err).toMatchObject({ status: 422, code: "validation_error" });
   });
 
-  it("classify returns 413 when uploaded files exceed CLASSIFY_MAX_UPLOAD_BYTES", async () => {
-    const { CLASSIFY_MAX_UPLOAD_BYTES, classify } = await import("@/api/client");
-    const oversized = new File([new Uint8Array(CLASSIFY_MAX_UPLOAD_BYTES + 1)], "huge.bin", { type: "application/octet-stream" });
-    const err = await classify({ files: [oversized] }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ApiRequestError);
-    expect(err).toMatchObject({ status: 413, code: "payload_too_large", message: "Upload exceeds the size limit" });
+  it("rejects uploads over the server limits (50 MB per file, 100 MB total) and accepts real captures", () => {
+    const mb = 1024 * 1024;
+    expect(oversizedUpload([{ size: 16 * mb }])).toBe(false); // a typical real HAR
+    expect(oversizedUpload([{ size: 50 * mb + 1 }])).toBe(true);
+    expect(oversizedUpload([{ size: 40 * mb }, { size: 40 * mb }, { size: 40 * mb }])).toBe(true);
   });
 });

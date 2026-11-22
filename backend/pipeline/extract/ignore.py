@@ -38,6 +38,9 @@ _PLATFORM_DOMAINS = (
     "gravatar.com", "wordpress.org", "wp.com", "amazonaws.com", "cloudfront.net",
 )
 _PLATFORM_EVIDENCE_TYPES = {"landing_domain", "click_domain"}
+# Documentation / form-placeholder mailbox domains, never a real contact.
+_PLACEHOLDER_EMAIL_DOMAINS = {"example.com", "example.org", "example.net", "domain.com",
+                              "yourdomain.com", "email.example"}
 
 # Simplified CDN / shared-hosting ranges (documentation / common edges).
 _CDN_NETWORKS = [
@@ -84,6 +87,8 @@ def ignore_reason_for(
     if evidence_type in _PLATFORM_EVIDENCE_TYPES and is_platform_domain(host or display):
         return "platform_domain"
 
+    if evidence_type == "email" and display.rsplit("@", 1)[-1].lower() in _PLACEHOLDER_EMAIL_DOMAINS:
+        return "placeholder_email"
     if evidence_type in {"phone", "phone_number"}:
         if _placeholder_phone(display) or (value and _placeholder_phone(value)):
             return "placeholder_phone"

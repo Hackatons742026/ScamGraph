@@ -19,7 +19,7 @@ from backend.pipeline.dedup import dedupe_artifacts, dedupe_media
 from backend.pipeline.extract import ExtractInput, coverage_for, dedupe_evidence, extract_all
 from backend.pipeline.extract.builders import make_evidence
 from backend.pipeline.extract.ignore import is_third_party_host
-from backend.pipeline.extract.extractors import _SENTENCE_RE
+from backend.pipeline.extract.extractors import _SENTENCE_RE, mask_identifiers, sentence_display
 from backend.pipeline.extract.normalize import norm_text_sentence
 from backend.pipeline.intake.adlib import parse_adlib
 from backend.pipeline.intake.bundle import parse_bundle
@@ -387,7 +387,7 @@ def _artifact_details(artifacts: list[Artifact], har_map: dict, html_map: dict) 
         if art_id in har_map:
             continue  # bundles: the HAR page row already describes this step
         pages.append({"artifact_id": art_id, "url_redacted": None, "final_url": None,
-            "domain": None, "title": (html.title or None) and html.title[:200],
+            "domain": None, "title": mask_identifiers(html.title)[:200] if html.title else None,
             "role": role_by_id.get(art_id)})
     return requests, redirects, pages
 
@@ -411,7 +411,7 @@ def _evidence_from_transcript(
                 tier=EvidenceTier.C,
                 family=None,
                 raw_value=normed,
-                display=" ".join(words[:12]) + ("…" if len(words) > 12 else ""),
+                display=sentence_display(sentence),
                 artifact_id=artifact.id,
                 funnel_step=artifact.funnel_step,
                 salt=salt,

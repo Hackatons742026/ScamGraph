@@ -6,6 +6,7 @@ import re
 from urllib.parse import urlsplit
 
 from backend.pipeline.extract.builders import make_evidence
+from backend.pipeline.extract.ignore import is_third_party_host
 from backend.pipeline.extract.normalize import (
     is_plausible_domain,
     norm_domain_from_url,
@@ -28,7 +29,13 @@ from backend.pipeline.models import (
 _PHONE_RE = re.compile(
     r"(?<!\d)(?:\+?\d[\d\s\-()]{7,}\d)"
 )
-_IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b")
+# E.164 numbers have at most 15 digits; national numbers at least 9.
+_PHONE_DIGITS = range(9, 16)
+# IBAN with optional single spaces/hyphens between characters (``PL61 1090 …``).
+_IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?:[ \-]?[A-Z0-9]){11,30}\b")
+# Polish domestic account number (NRB): 26 digits, usually ``61 1090 1014 …``.
+_NRB_RE = re.compile(r"(?<![\dA-Z])\d{2}(?:[ \-]?\d{4}){6}(?!\d)")
+_EMAIL_RE = re.compile(r"(?<![\w.+-])[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,24}\b")
 # ``@handle`` only when not part of an e-mail address or a domain; Telegram
 # usernames are 5-32 characters.
 _TG_RE = re.compile(
@@ -67,7 +74,8 @@ def extract_har(artifact: Artifact, har: HarParseResult, *, salt: str) -> list[E
 
     param_names: set[str] = set()
     for req in har.requests:
-        param_names |= set(param_name_set(req.url_redacted))
+        if not is_third_party_host(req.host):
+            param_names |= kit_param_names(req.url_redacted)
         if req.host and is_plausible_domain(req.host):
             host = norm_host(req.host)
             is_click = "/click" in req.path_pattern.lower() or "clickid" in req.url_redacted.lower()
@@ -140,7 +148,23 @@ def extract_har(artifact: Artifact, har: HarParseResult, *, salt: str) -> list[E
                     )
                 )
 
-    if param_names:
+    for script in har.scripts:
+        # Scripts are compared by content; the same file name alone proves nothing.
+        out.append(
+            make_evidence(
+                type="js_hash",
+                tier=EvidenceTier.B,
+                family=EvidenceFamily.KIT,
+                raw_value=f"sha256:{script.sha256}",
+                display=f"js:{script.name}"[:60],
+                artifact_id=aid,
+                funnel_step=step,
+                host=script.host,
+                salt=salt,
+            )
+        )
+
+    if len(param_names) >= 2:
         joined = ",".join(sorted(param_names))
         out.append(
             make_evidence(
@@ -180,6 +204,8 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
         )
 
     for asset in html.assets:
+        if asset.local and not asset.content_sha256:
+            continue  # the file was not saved with the page: a bare file name proves nothing
         # Local sidecar files are compared by content; their location is never kept.
         raw_value = (f"sha256:{asset.content_sha256}" if asset.content_sha256
                      else asset.path_or_url_redacted)
@@ -246,17 +272,129 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
             )
 
     out.extend(_text_evidence(text, artifact_id=aid, funnel_step=step, salt=salt))
+    visible_emails = {value for value, _ in find_emails(text)}
+    for link in html.links:
+        if link.lower().startswith("mailto:"):
+            for value, _ in find_emails(link[7:]):
+                if value not in visible_emails:
+                    visible_emails.add(value)
+                    out.append(_email_evidence(value, artifact_id=aid, funnel_step=step, salt=salt))
     return out
+
+
+def _valid_iban(compact: str) -> bool:
+    """ISO 13616 mod-97 check, so random letter/digit runs are not accounts."""
+    if not 15 <= len(compact) <= 34:
+        return False
+    rearranged = compact[4:] + compact[:4]
+    try:
+        return int("".join(str(int(ch, 36)) for ch in rearranged)) % 97 == 1
+    except ValueError:
+        return False
+
+
+# Official IBAN lengths for countries seen in Central European fraud reports.
+_IBAN_LENGTHS = {
+    "PL": 28, "DE": 22, "GB": 22, "FR": 27, "ES": 24, "IT": 27, "NL": 18, "BE": 16, "AT": 20,
+    "CH": 21, "CZ": 24, "SK": 24, "HU": 28, "RO": 24, "BG": 22, "HR": 21, "SI": 19, "LT": 20,
+    "LV": 21, "EE": 20, "FI": 18, "SE": 24, "NO": 15, "DK": 18, "IE": 22, "PT": 25, "GR": 27,
+    "CY": 28, "MT": 31, "LU": 20, "UA": 29, "MD": 24, "GE": 22, "TR": 26,
+}
+
+
+def _alnum_span(raw: str, count: int) -> int:
+    """Length of the prefix of ``raw`` that holds ``count`` letters/digits."""
+    seen = 0
+    for index, char in enumerate(raw):
+        if char.isalnum():
+            seen += 1
+            if seen == count:
+                return index + 1
+    return len(raw)
+
+
+def find_accounts(text: str) -> list[tuple[str, tuple[int, int]]]:
+    """Valid bank accounts (IBAN, Polish NRB as ``PL`` IBAN) with their text spans."""
+    found: list[tuple[str, tuple[int, int]]] = []
+    upper = text.upper()
+    for match in _IBAN_RE.finditer(upper):
+        # The pattern may run into the next words ("... 2874 DO JUTRA"): cut the
+        # candidate at the country's IBAN length, or try the longest valid prefix.
+        compact = re.sub(r"[ \-]", "", match.group(0))
+        country = compact[:2]
+        lengths = ([_IBAN_LENGTHS[country]] if country in _IBAN_LENGTHS
+                   else range(min(34, len(compact)), 14, -1))
+        for length in lengths:
+            candidate = compact[:length]
+            if len(candidate) == length and _valid_iban(candidate):
+                end = match.start() + _alnum_span(match.group(0), length)
+                found.append((candidate, (match.start(), end)))
+                break
+    for match in _NRB_RE.finditer(upper):
+        if any(start <= match.start() < end for _, (start, end) in found):
+            continue
+        compact = "PL" + re.sub(r"[ \-]", "", match.group(0))
+        if _valid_iban(compact):
+            found.append((compact, match.span()))
+    return found
+
+
+def find_emails(text: str) -> list[tuple[str, tuple[int, int]]]:
+    return [(m.group(0).lower(), m.span()) for m in _EMAIL_RE.finditer(text)]
+
+
+def find_phones(text: str, *, skip: list[tuple[int, int]] = ()) -> list[tuple[str, tuple[int, int]]]:
+    """Phone-like digit groups of 9-15 digits outside the given spans (accounts, e-mails)."""
+    found = []
+    for match in _PHONE_RE.finditer(text):
+        if any(start < match.end() and match.start() < end for start, end in skip):
+            continue
+        digits = norm_phone_digits(match.group(0))
+        if len(digits) in _PHONE_DIGITS:
+            found.append((digits, match.span()))
+    return found
+
+
+def mask_identifiers(text: str) -> str:
+    """Mask accounts, e-mails, phone numbers and handles inside display text."""
+    spans: list[tuple[int, int, str]] = []
+    accounts = find_accounts(text)
+    emails = find_emails(text)
+    spans += [(s, e, f"{value[:4]} **** {value[-4:]}") for value, (s, e) in accounts]
+    spans += [(s, e, _mask_email(value)) for value, (s, e) in emails]
+    taken = [span for _, span in accounts + emails]
+    spans += [(s, e, _mask_digits(value)) for value, (s, e) in find_phones(text, skip=taken)]
+    for match in _TG_RE.finditer(text):
+        if not any(s < match.end() and match.start() < e for s, e, _ in spans):
+            spans.append((match.start(), match.end(), _mask_handle(match.group(1))))
+    for start, end, replacement in sorted(spans, reverse=True):
+        text = text[:start] + replacement + text[end:]
+    return text
 
 
 def _text_evidence(text: str, *, artifact_id: str, funnel_step: int | None,
                    salt: str) -> list[Evidence]:
-    """Contact identifiers and long sentences from visible or pasted text."""
+    """Contact identifiers (accounts) and long sentences from visible or pasted text."""
     out: list[Evidence] = []
     aid, step = artifact_id, funnel_step
-    for match in _PHONE_RE.finditer(text):
-        raw = match.group(0)
-        digits = norm_phone_digits(raw)
+    accounts = find_accounts(text)
+    emails = find_emails(text)
+    for value, _ in accounts:
+        out.append(
+            make_evidence(
+                type="iban",
+                tier=EvidenceTier.A,
+                family=None,
+                raw_value=value,
+                display=f"{value[:4]} **** {value[-4:]}",
+                artifact_id=aid,
+                funnel_step=step,
+                salt=salt,
+            )
+        )
+    for value, _ in emails:
+        out.append(_email_evidence(value, artifact_id=aid, funnel_step=step, salt=salt))
+    for digits, _ in find_phones(text, skip=[span for _, span in accounts + emails]):
         out.append(
             make_evidence(
                 type="phone",
@@ -264,20 +402,6 @@ def _text_evidence(text: str, *, artifact_id: str, funnel_step: int | None,
                 family=None,
                 raw_value=digits,
                 display=_mask_digits(digits),
-                artifact_id=aid,
-                funnel_step=step,
-                salt=salt,
-            )
-        )
-    for match in _IBAN_RE.finditer(text.upper()):
-        raw = match.group(0)
-        out.append(
-            make_evidence(
-                type="iban",
-                tier=EvidenceTier.A,
-                family=None,
-                raw_value=raw,
-                display=f"{raw[:4]} **** {raw[-4:]}",
                 artifact_id=aid,
                 funnel_step=step,
                 salt=salt,
@@ -323,7 +447,7 @@ def _text_evidence(text: str, *, artifact_id: str, funnel_step: int | None,
                 tier=EvidenceTier.C,
                 family=None,
                 raw_value=normed,
-                display=" ".join(words[:12]) + ("…" if len(words) > 12 else ""),
+                display=sentence_display(sentence),
                 artifact_id=aid,
                 funnel_step=step,
                 salt=salt,
@@ -350,6 +474,17 @@ def extract_url(artifact: Artifact, url: str, *, salt: str) -> list[Evidence]:
     return _url_evidence(artifact, url, salt=salt, with_params=True)
 
 
+# Standard marketing / ad-platform parameters appear on unrelated sites.
+_GENERIC_PARAMS = {"fbclid", "gclid", "gbraid", "wbraid", "dclid", "msclkid", "ttclid", "twclid",
+                   "yclid", "li_fat_id", "igshid", "mc_cid", "mc_eid", "_ga", "_gl", "ref", "lang"}
+
+
+def kit_param_names(url: str) -> set[str]:
+    """Query parameter names that can characterise a kit (no utm_* or click IDs)."""
+    return {name for name in param_name_set(url)
+            if name and not name.startswith("utm_") and name not in _GENERIC_PARAMS}
+
+
 def _url_evidence(artifact: Artifact, url: str, *, salt: str, with_params: bool) -> list[Evidence]:
     out: list[Evidence] = []
     domain = norm_domain_from_url(url)
@@ -370,8 +505,8 @@ def _url_evidence(artifact: Artifact, url: str, *, salt: str, with_params: bool)
             salt=salt,
         )
     )
-    names = param_name_set(url)
-    if with_params and names:
+    names = kit_param_names(url)
+    if with_params and len(names) >= 2:
         joined = ",".join(sorted(names))
         out.append(
             make_evidence(
@@ -449,13 +584,40 @@ def extract_media(artifact: Artifact, media: MediaRef, *, salt: str) -> list[Evi
                     tier=EvidenceTier.C,
                     family=None,
                     raw_value=normed,
-                    display=" ".join(words[:12]) + "…",
+                    display=sentence_display(sentence),
                     artifact_id=artifact.id,
                     funnel_step=artifact.funnel_step,
                     salt=salt,
                 )
             )
     return out
+
+
+def sentence_display(sentence: str) -> str:
+    """First 12 words of a sentence with identifiers masked (never raw accounts)."""
+    words = mask_identifiers(" ".join(sentence.split())).split()
+    return " ".join(words[:12]) + ("…" if len(words) > 12 else "")
+
+
+def _email_evidence(value: str, *, artifact_id: str | None, funnel_step: int | None,
+                    salt: str) -> Evidence:
+    return make_evidence(
+        type="email",
+        tier=EvidenceTier.A,
+        family=None,
+        raw_value=value,
+        display=_mask_email(value),
+        artifact_id=artifact_id,
+        funnel_step=funnel_step,
+        host=value.rsplit("@", 1)[-1],
+        salt=salt,
+    )
+
+
+def _mask_email(value: str) -> str:
+    """``ab…@domain`` — the mailbox is masked, the domain stays readable."""
+    local, _, domain = value.partition("@")
+    return f"{local[:2]}…@{domain}" if len(local) > 2 else f"…@{domain}"
 
 
 def _mask_handle(handle: str) -> str:

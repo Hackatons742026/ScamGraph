@@ -1,5 +1,5 @@
 // Mock transport for openapi-fetch: answers every contract-v1 endpoint from synthetic fixtures.
-import { CLASSIFY_MAX_UPLOAD_BYTES } from "@/api/client";
+import { CLASSIFY_MAX_FILE_BYTES, CLASSIFY_MAX_UPLOAD_BYTES } from "@/api/client";
 import type { CampaignDetail, CampaignSummary, ClassifyResult, EdgeDecisionRequest, MergeRequest, Outcome, SplitRequest } from "@/api/types";
 import * as db from "./data";
 import { MOCK_CAMPAIGN_FAIL_ID, MOCK_EDGE_FAIL_ID } from "./sentinels";
@@ -178,11 +178,16 @@ function runSnapshot() {
   return db.latestRun;
 }
 
+/** Same limits as the server: one file over 50 MB, or more than 100 MB in total, is rejected. */
+export function oversizedUpload(files: ReadonlyArray<{ size: number }>): boolean {
+  const total = files.reduce((sum, f) => sum + f.size, 0);
+  return total > CLASSIFY_MAX_UPLOAD_BYTES || files.some((f) => f.size > CLASSIFY_MAX_FILE_BYTES);
+}
+
 async function classify(req: Request): Promise<ClassifyResult> {
   const form = await req.formData();
   const files = form.getAll("files").filter((f): f is File => typeof f !== "string");
-  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
-  if (totalBytes > CLASSIFY_MAX_UPLOAD_BYTES) {
+  if (oversizedUpload(files)) {
     throw new HttpError(413, "payload_too_large", "Upload exceeds the size limit");
   }
   const text = form.get("text");

@@ -4,7 +4,9 @@ import type { ClassifyResult } from "./types";
 import type { paths } from "./schema";
 
 /** Matches backend live classify body cap (`len(body) > 10_000_000`). */
-export const CLASSIFY_MAX_UPLOAD_BYTES = 10_000_000;
+/** Server defaults (SCAMGRAPH_MAX_UPLOAD_FILE_MB / _REQUEST_MB): real HAR captures and videos exceed 10 MB. */
+export const CLASSIFY_MAX_FILE_BYTES = 50 * 1024 * 1024;
+export const CLASSIFY_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 export type ClassifyInput = {
   files: File[];

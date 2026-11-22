@@ -69,6 +69,7 @@ const IGNORE_REASON: Record<string, string> = {
   small_doc: "Helper document < 5 KB",
   high_df: "Too common (> 30% of incidents)",
   platform_domain: "Shared platform domain (not operator infrastructure)",
+  placeholder_email: "Placeholder e-mail address",
   other: "Ignored by rule",
 };
 
