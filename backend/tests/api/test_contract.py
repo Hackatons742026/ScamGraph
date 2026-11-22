@@ -108,6 +108,10 @@ def test_override_openapi_declares_parameters_bodies_and_responses():
     assert models["EdgeDecisionRequest"]["properties"]["decision"]["enum"] == ["confirm", "reject"]
     assert "note" not in models["EdgeDecisionRequest"].get("required", [])
     assert set(models["EdgeDecisionResponse"]["properties"]) == {"edge_id", "decision", "recorded_at"}
+    override = models["AnalystEdgeOverride"]["properties"]
+    assert override["decision"]["enum"] == ["confirm", "reject"]
+    assert {"recorded_at", "note"} <= set(override)
+    assert "analyst_override" in models["Edge"]["properties"]
     assert models["MergeRequest"]["properties"]["campaign_ids"]["items"]["type"] == "string"
     assert models["SplitRequest"]["properties"]["incident_ids"]["items"]["type"] == "string"
     contract_error(client.post("/api/edges/x/decision", json={"decision": "approve"}),

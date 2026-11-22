@@ -47,6 +47,11 @@ class EdgeDecisionResponse(ContractModel):
     decision: Literal["confirm", "reject"]
     recorded_at: str
 
+class AnalystEdgeOverride(ContractModel):
+    decision: Literal["confirm", "reject"]
+    recorded_at: str
+    note: str | None = None
+
 class MergeRequest(ContractModel):
     campaign_ids: list[str]
     note: str | None = None
@@ -60,6 +65,7 @@ class Edge(ContractModel):
     id: str; source: str; target: str; level: Level
     tier: Tier; families: list[str]; score: float; comparable: int
     low_confidence: bool; evidence: list[EvidenceItem]
+    analyst_override: AnalystEdgeOverride | None = None
 
 class ArtifactSummary(ContractModel):
     id: str; kind: ArtifactKind; name_display: str; funnel_step: int | None
