@@ -11,8 +11,10 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from backend.db import Repository
+from backend.pipeline.extract.ignore import is_third_party_host
 from backend.pipeline.run import process_input, run_on_data_dir
 from backend.pipeline.models import Evidence, IncidentBundle
 from backend.engine.linking import link_incidents
@@ -56,13 +58,39 @@ def analysis_snapshot(repo: Repository, extra: IncidentBundle | None = None) -> 
     decided_at = datetime.now(timezone.utc).isoformat()
     decisions = []
     for identifier in grouped:
+        member_of = clusters.campaign_by_incident.get(identifier)
+        if member_of:
+            # The stored decision must agree with the incident's campaign membership.
+            decisions.append({"incident_id": identifier, "outcome": "known_campaign",
+                "campaign_id": member_of, "reasons": [membership_reason(identifier, member_of,
+                    active_edges, clusters)], "decided_at": decided_at})
+            continue
         memory = cluster_incidents(grouped, active_edges, exclude_incident=identifier)
         result = classify(identifier, [edge for edge in active_edges if identifier in {edge.source, edge.target}],
             memory, coverage_ok=bool(grouped[identifier]), exclude_incident=identifier)
         decisions.append({"incident_id": identifier, "outcome": result.outcome,
-            "campaign_id": stable_campaign(result, clusters, identifier),
+            "campaign_id": map_campaign(result.campaign_id, memory, clusters.campaign_by_incident)
+                if result.outcome == "known_campaign" else None,
             "reasons": list(result.reasons), "decided_at": decided_at})
     return edges, [*clusters.networks, *clusters.campaigns], decisions, clusters
+
+
+def membership_reason(identifier: str, campaign_id: str, edges: list[Any], clusters: Any) -> str:
+    links = [edge for edge in edges if identifier in {edge.source, edge.target}
+             and clusters.campaign_by_incident.get(edge.target if edge.source == identifier else edge.source)
+             == campaign_id and edge.level == "campaign"]
+    strongest = "tier A" if any(edge.tier == "A" for edge in links) else "multiple evidence families"
+    count = len({edge.target if edge.source == identifier else edge.source for edge in links})
+    noun = "incident" if count == 1 else "incidents"
+    return f"Grouped with {count} other {noun} in this campaign via {strongest}."
+
+
+def map_campaign(campaign_id: str | None, memory: Any, campaign_by_incident: dict[str, str]) -> str | None:
+    """Translate a campaign id from a leave-one-out memory to the stored group id."""
+    if not campaign_id:
+        return None
+    members = [incident for incident, group in memory.campaign_by_incident.items() if group == campaign_id]
+    return next((campaign_by_incident[m] for m in sorted(members) if m in campaign_by_incident), None)
 
 def persist_upload(repo: Repository, bundle: IncidentBundle) -> None:
     """Store an uploaded incident and its refreshed analysis in one transaction."""
@@ -105,8 +133,9 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
         for row in repo.list_incidents():
             identifier = row["id"]
             for item in repo.get_artifacts(identifier):
-                value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0})
+                value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0, "partial": 0})
                 value["total"] += 1; value["failed" if item["parse_status"] == "failed" else "parsed"] += 1
+                value["partial"] += item["parse_status"] == "partial"
         summary.update(campaigns=len(clusters.campaigns), networks=len(clusters.networks), unassigned=len(clusters.unassigned),
             new_candidates=sum(d["outcome"] == "new_candidate" for d in decisions),
             needs_review=sum(d["outcome"] == "needs_review" for d in decisions),
@@ -115,17 +144,14 @@ def execute_import(repo: Repository, run_id: str, data_dir: str) -> None:
     except Exception as exc:  # background job boundary
         repo.save_run(run_id, "failed", started, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc)[:500])
 def coverage(raw: str) -> Coverage:
+    """Coverage badges are the gaps that weaken a decision (``no HAR``, ``video only``)."""
     value = json.loads(raw or "{}")
     kinds = value.get("kinds_present", [])
-    display_names = {"har": "HAR", "html": "HTML", "mhtml": "MHTML",
-        "bundle": "bundle", "image": "images", "video": "video",
-        "adlib_json": "AdLib JSON", "text": "text", "url": "URLs"}
-    badges = [f"no {display_names.get(kind, str(kind).replace('_', ' ').capitalize())}"
-              for kind in value.get("kinds_missing", [])]
-    badges.extend(note for note in value.get("notes", [])
-                  if note in {"no HAR", "video only", "media only"})
+    badges = [note for note in value.get("notes", []) if note in {"no HAR", "video only", "media only"}]
+    if not kinds:
+        badges = ["no artifacts"]
     badges = list(dict.fromkeys(badges))
-    return Coverage(artifact_kinds=kinds, has_har="har" in kinds,
+    return Coverage(artifact_kinds=kinds, has_har="har" in kinds or ("bundle" in kinds and "no HAR" not in badges),
         has_page=any(x in kinds for x in ("html", "mhtml", "bundle")),
         has_image="image" in kinds, has_video="video" in kinds,
         has_adlib="adlib_json" in kinds, has_text="text" in kinds,
@@ -152,10 +178,17 @@ def group_context(repo: Repository) -> dict:
     }
     rows_by_id = {item["id"]: item for item in campaigns}
     labels: dict[str, str] = {}
+    stored_labels = repo.group_labels()
     for level, prefix in (("campaign", "Campaign"), ("network", "Network")):
         ordered = sorted((item for item in campaigns if item["level"] == level),
                          key=lambda item: (item["first_seen"] or "", item["id"]))
-        labels.update({item["id"]: f"{prefix} {index}" for index, item in enumerate(ordered, 1)})
+        used = {number for group, (lvl, number) in stored_labels.items() if lvl == level}
+        fallback = (n for n in range(1, len(ordered) + len(used) + 2) if n not in used)
+        for item in ordered:
+            # Stored numbers never shift after merges or splits; groups created by
+            # older databases without a stored number get the next free one.
+            number = stored_labels[item["id"]][1] if item["id"] in stored_labels else next(fallback)
+            labels[item["id"]] = f"{prefix} {number}"
     members_by_group: dict[str, list[str]] = {item["id"]: [] for item in campaigns}
     campaign_by_incident: dict[str, str] = {}
     network_by_incident: dict[str, str] = {}
@@ -215,7 +248,7 @@ def artifact(row: dict, *, duplicate_of: str | None = None) -> ArtifactSummary:
         observations = int(match.group(1))
         error = re.sub(r"(?:^|;\s*)observations=\d+(?=$|;)", "", error).strip(" ;")
     return ArtifactSummary(id=row["id"], kind=row["kind"],
-        name_display=f"Artifact.{row['kind']}", funnel_step=row["funnel_step"],
+        name_display=artifact_name(row), funnel_step=row["funnel_step"],
         role=row["role"] or "unknown", parse_status=row["parse_status"] or "partial",
         error=safe_artifact_error(row["kind"], row["parse_status"], error),
         captured_at=row["captured_at"], duplicate_of=duplicate_of,
@@ -225,6 +258,21 @@ def safe_artifact_error(kind: str, status: str | None, error: str | None) -> str
     """Return a useful parser hint without exposing paths or exception details."""
     if not error:
         return None
+    message = error.casefold()
+    if kind == "video":
+        if "ffmpeg not available" in message:
+            return "Video saved, but no frames were extracted: ffmpeg is not installed on the server."
+        return "Video frames could not be extracted. Check that the file is a playable MP4, MOV or WEBM video."
+    if kind in {"har", "bundle"}:
+        if status == "partial":
+            return "Capture was only partly readable; some requests were skipped."
+        return "Capture could not be parsed. Export it again as a valid HAR (JSON) file."
+    if kind in {"html", "mhtml"}:
+        return "Saved page could not be parsed. Save it again as a complete web page."
+    if kind == "adlib_json":
+        if "no ad_id/page_id" in message:
+            return "Ad Library JSON has no ad or advertiser page ID."
+        return "Ad Library JSON could not be parsed."
     if kind != "image":
         return "Parse failed"
 
@@ -241,6 +289,103 @@ def safe_artifact_error(kind: str, status: str | None, error: str | None) -> str
     if "preprocess unavailable" in message:
         return "Image could not be decoded or prepared. Check that it is a valid PNG, JPEG, or WEBP image."
     return "Image saved, but optional OCR processing was incomplete."
+
+_KIND_NAMES = {"text": "Pasted text", "url": "Submitted URL", "bundle": "Capture bundle"}
+
+
+def artifact_name(row: dict) -> str:
+    """File name only (never the folder path) so analysts can tell artifacts apart."""
+    kind = row["kind"]
+    if kind in _KIND_NAMES:
+        return _KIND_NAMES[kind]
+    name = Path(str(row.get("path") or "")).name.strip()
+    if not name or name.startswith("."):
+        return f"{kind.upper() if kind == 'har' else kind.replace('_', ' ').capitalize()} file"
+    return name if len(name) <= 80 else f"{name[:38]}…{name[-38:]}"
+
+
+_ROLE_ORDER = {"ad": 1, "prelander": 2, "offer": 3, "order": 4}
+
+
+def funnel(artifacts: list[ArtifactSummary], details: dict[str, dict]) -> list[FunnelStep]:
+    """Funnel steps from ``strona_N`` folders, or from artifact roles when there are none."""
+    stepped = [a for a in artifacts if a.funnel_step is not None]
+    groups: dict[int, list[ArtifactSummary]] = {}
+    if stepped:
+        for item in stepped:
+            groups.setdefault(item.funnel_step, []).append(item)
+    else:
+        roles = sorted({a.role.value if hasattr(a.role, "value") else a.role for a in artifacts} & set(_ROLE_ORDER),
+                       key=_ROLE_ORDER.get)
+        for index, role in enumerate(roles, 1):
+            groups[index] = [a for a in artifacts if (a.role.value if hasattr(a.role, "value") else a.role) == role]
+    steps = []
+    for number in sorted(groups):
+        items = groups[number]
+        roles = [a.role.value if hasattr(a.role, "value") else a.role for a in items]
+        known = [r for r in roles if r in _ROLE_ORDER]
+        role = min(known, key=_ROLE_ORDER.get) if known else "unknown"
+        # Ad-tech pixels redirect too; the funnel lists only the scam pages' own hops.
+        hops = [hop for a in items for hop in details.get(a.id, {}).get("redirects", [])
+                if not is_third_party_host(urlsplit(hop["url_display"]).hostname)]
+        domain = next((p["domain"] for a in items for p in details.get(a.id, {}).get("pages", [])
+                       if p.get("domain")), None)
+        steps.append(FunnelStep(step=number, role=role, artifact_ids=[a.id for a in items],
+            domain_display=domain, redirect_chain=[redirect_hop(hop) for hop in hops][:50]))
+    return steps
+
+
+def redirect_hop(row: dict) -> RedirectHop:
+    kind = row.get("kind") if row.get("kind") in {"3xx", "meta", "js"} else "3xx"
+    return RedirectHop(seq=row["seq"], url_display=row["url_display"], status=row.get("status"), kind=kind)
+
+
+def page_summary(row: dict) -> PageSummary:
+    return PageSummary(url_display=row.get("final_url") or row.get("url_redacted") or "",
+        domain_display=row.get("domain") or "", title=row.get("title"), role=row.get("role"))
+
+
+def media_size(row: dict) -> tuple[int, int]:
+    """Pixel size of a cached media file; (0, 0) when it cannot be read."""
+    try:
+        from PIL import Image
+        with Image.open(safe_media_path(row)) as opened:
+            return opened.size
+    except Exception:  # noqa: BLE001 — missing files or optional Pillow must not fail the API
+        return 0, 0
+
+
+def campaign_links(repo: Repository, campaign_id: str, groups: dict) -> list[CampaignLink]:
+    """Other groups connected to this one by at least one non-rejected edge."""
+    members = set(groups["members_by_group"].get(campaign_id, []))
+    level = groups["rows_by_id"][campaign_id]["level"]
+    shared: dict[str, list[EvidenceItem]] = {}
+    for row in repo.list_edges():
+        if row.get("status") == "rejected":
+            continue
+        ends = {row["a_incident"], row["b_incident"]}
+        inside = ends & members
+        if len(inside) != 1:
+            continue
+        other = next(iter(ends - members))
+        if level == "campaign":
+            other_group = groups["campaign_by_incident"].get(other) or groups["network_by_incident"].get(other)
+        else:
+            other_group = groups["network_by_incident"].get(other) or groups["campaign_by_incident"].get(other)
+        if not other_group or other_group == campaign_id:
+            continue
+        items = shared.setdefault(other_group, [])
+        seen = {(item.type, item.display) for item in items}
+        for item in edge(row).evidence:
+            if (item.type, item.display) not in seen:
+                items.append(item)
+                seen.add((item.type, item.display))
+    tier_rank = {"A": 0, "B": 1, "C": 2}
+    return [CampaignLink(other_id=group_id, other_label=groups["labels"].get(group_id, group_id),
+                level=groups["rows_by_id"][group_id]["level"],
+                shared_evidence=sorted(items, key=lambda i: tier_rank.get(getattr(i.tier, "value", i.tier), 3))[:20])
+            for group_id, items in sorted(shared.items(), key=lambda pair: groups["labels"].get(pair[0], pair[0]))]
+
 
 def edge(row: dict) -> Edge:
     raw = json.loads(row["evidence_json"] or "[]")
@@ -284,9 +429,24 @@ def safe_media_path(row: dict) -> Path:
         if resolved.is_file() and resolved.is_relative_to(root):
             return resolved
     raise FileNotFoundError
+def _limit_mb(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+def upload_limits() -> tuple[int, int]:
+    """(per-file, per-request) byte limits; real HAR captures and videos are often >5 MB."""
+    per_file = _limit_mb("SCAMGRAPH_MAX_UPLOAD_FILE_MB", 50) * 1024 * 1024
+    per_request = _limit_mb("SCAMGRAPH_MAX_UPLOAD_REQUEST_MB", 100) * 1024 * 1024
+    return per_file, max(per_file, per_request)
+
+
 def classify_multipart(repo: Repository, body: bytes, content_type: str,
                        exclude: str | None = None) -> tuple[object, object, list]:
-    if len(body) > 10_000_000: raise OverflowError
+    per_file, per_request = upload_limits()
+    if len(body) > per_request: raise OverflowError
     boundary = re.search(r"boundary=([^;]+)", content_type)
     if not boundary: raise ValueError
     text = url = None
@@ -299,7 +459,7 @@ def classify_multipart(repo: Repository, body: bytes, content_type: str,
             filename = re.search(rb'filename="([^"]*)"', header)
             if filename and value:
                 safe = Path(filename.group(1).decode(errors="ignore")).name
-                if not safe or len(value) > 5_000_000: raise OverflowError
+                if not safe or len(value) > per_file: raise OverflowError
                 path = Path(directory) / safe; path.write_bytes(value); paths.append(path)
             elif name and name.group(1) in {b"text", b"url"} and value.strip():
                 if name.group(1) == b"text": text = value.decode(errors="replace")
@@ -325,7 +485,27 @@ def classify_multipart(repo: Repository, body: bytes, content_type: str,
     active_edges = [edge for edge in edges if f"edge-{edge.source}-{edge.target}" not in rejected]
     memory = cluster_incidents(grouped, [e for e in active_edges if bundle.incident.id not in {e.source, e.target}],
                                exclude_incident=exclude)
-    candidate = [e for e in active_edges if bundle.incident.id in {e.source, e.target}]
+    # Leave-one-out must not reveal links to the incident it hides.
+    candidate = [e for e in active_edges if bundle.incident.id in {e.source, e.target}
+                 and (not exclude or exclude not in {e.source, e.target})]
     result = classify(bundle.incident.id, candidate, memory,
         coverage_ok=bool(bundle.coverage.kinds_present), exclude_incident=exclude)
+    if result.outcome == "known_campaign":
+        # Memory clusters are rebuilt per request; report the stored group the analyst sees.
+        stored = group_context(repo)["campaign_by_incident"]
+        result = type(result)(result.outcome, map_campaign(result.campaign_id, memory, stored), result.reasons)
     return result, bundle, candidate
+
+
+def unreadable_artifact_reasons(bundle: IncidentBundle) -> list[str]:
+    """Safe, actionable notes for uploaded files that could not be fully parsed."""
+    notes = []
+    for item in bundle.artifacts:
+        status = getattr(item.parse_status, "value", item.parse_status)
+        if status not in {"failed", "partial"} or not item.error:
+            continue
+        kind = getattr(item.kind, "value", item.kind)
+        message = safe_artifact_error(kind, status, item.error)
+        if message:
+            notes.append(f"{artifact_name({'kind': kind, 'path': item.path})}: {message}")
+    return notes

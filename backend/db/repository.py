@@ -23,6 +23,10 @@ def _scalar(value: Any) -> Any:
     return value
 
 
+# Membership rows that belong to campaign-level groups (networks are kept on replay).
+_CAMPAIGN_MEMBERSHIP = "campaign_id IN (SELECT id FROM campaigns WHERE level='campaign')"
+
+
 class Repository:
     """Small repository with one transaction per public save operation."""
 
@@ -428,6 +432,7 @@ class Repository:
                 detail["note"] = note
             db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
                 (datetime.now(timezone.utc).isoformat(), "campaign.split", campaign_id, json.dumps(detail)))
+            self._assign_group_labels(db)
         return campaign_id, new_campaign_id
 
     def save_analysis(self, edges: Iterable[Any], campaigns: Iterable[Any],
@@ -453,6 +458,40 @@ class Repository:
         db.executemany("INSERT INTO membership VALUES (?,?,?)", members)
         db.executemany("INSERT INTO decisions VALUES (?,?,?,?,?)", decision_rows)
         Repository._restore_manual_overrides(db)
+        Repository._drop_empty_groups(db)
+        Repository._assign_group_labels(db)
+
+    @staticmethod
+    def _drop_empty_groups(db: sqlite3.Connection) -> None:
+        """Remove groups left without enough members after overrides were replayed."""
+        db.execute("UPDATE decisions SET campaign_id=NULL WHERE campaign_id IN ("
+                   "SELECT c.id FROM campaigns c WHERE NOT EXISTS ("
+                   "SELECT 1 FROM membership m WHERE m.campaign_id=c.id))")
+        db.execute("DELETE FROM campaigns WHERE NOT EXISTS ("
+                   "SELECT 1 FROM membership m WHERE m.campaign_id=campaigns.id)")
+        # A network groups several incidents; one left alone is no longer a network.
+        db.execute("DELETE FROM campaigns WHERE level='network' AND ("
+                   "SELECT COUNT(*) FROM membership m WHERE m.campaign_id=campaigns.id) < 2")
+
+    @staticmethod
+    def _assign_group_labels(db: sqlite3.Connection) -> None:
+        """Give every group a number once and keep it, so labels do not shift."""
+        known = {row["group_id"] for row in db.execute("SELECT group_id FROM group_labels")}
+        for level in ("campaign", "network"):
+            current = db.execute("SELECT COALESCE(MAX(number), 0) FROM group_labels WHERE level=?",
+                                 (level,)).fetchone()[0]
+            for row in db.execute("SELECT id FROM campaigns WHERE level=? ORDER BY first_seen, id",
+                                  (level,)).fetchall():
+                if row["id"] in known:
+                    continue
+                current += 1
+                db.execute("INSERT INTO group_labels (group_id, level, number) VALUES (?,?,?)",
+                           (row["id"], level, current))
+
+    def group_labels(self) -> dict[str, tuple[str, int]]:
+        with self._connection() as db:
+            return {row["group_id"]: (row["level"], row["number"])
+                    for row in db.execute("SELECT * FROM group_labels")}
 
     @staticmethod
     def _restore_manual_overrides(db: sqlite3.Connection) -> None:
@@ -495,7 +534,8 @@ class Repository:
                 profile_json = profile["profile_json"] if profile else "{}"
                 db.execute("INSERT OR IGNORE INTO campaigns (id,level,label,profile_json,first_seen,last_seen) "
                     "VALUES (?, 'campaign', ?, ?, NULL, NULL)", (target, target, profile_json))
-                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders})", incident_ids)
+                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders}) "
+                    f"AND {_CAMPAIGN_MEMBERSHIP}", incident_ids)
                 db.executemany("INSERT OR IGNORE INTO membership (campaign_id,incident_id,reason_json) "
                     "VALUES (?,?,'{}')", [(target, identifier) for identifier in incident_ids
                                             if db.execute("SELECT 1 FROM incidents WHERE id=?", (identifier,)).fetchone()])
@@ -521,7 +561,8 @@ class Repository:
                 all_ids = list(dict.fromkeys([*incident_ids, *remaining_ids]))
                 placeholders = ",".join("?" for _ in all_ids)
                 selected_placeholders = ",".join("?" for _ in incident_ids)
-                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders})", all_ids)
+                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders}) "
+                    f"AND {_CAMPAIGN_MEMBERSHIP}", all_ids)
                 db.executemany("INSERT OR IGNORE INTO membership (campaign_id,incident_id,reason_json) "
                     "VALUES (?,?,'{}')", [(target, identifier) for identifier in remaining_ids
                                             if db.execute("SELECT 1 FROM incidents WHERE id=?", (identifier,)).fetchone()])

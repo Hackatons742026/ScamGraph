@@ -266,15 +266,19 @@ def test_tier_a_telegram_campaign_is_created_after_upload_reanalysis(tmp_path, m
     first = upload("offer-a.html", "Synthetic Offer Alpha")
     assert first.status_code == 200 and first.json()["outcome"] == "new_candidate"
     second = upload("offer-b.html", "Synthetic Offer Beta")
-    assert second.status_code == 200 and second.json()["outcome"] == "new_candidate"
+    # Classify reports the stored result: the second upload now forms a campaign with the first.
+    assert second.status_code == 200 and second.json()["outcome"] == "known_campaign"
+    assert second.json()["campaign_label"]
 
     campaigns = [row for row in repo.list_campaigns() if row["level"] == "campaign"]
     assert len(campaigns) == 1
     detail = client.get(f"/api/campaigns/{campaigns[0]['id']}").json()
     assert len(detail["members"]) == 2
     assert all(member["status"] == "in_campaign" for member in detail["members"])
-    assert all(member["outcome"] == "new_candidate" for member in detail["members"])
-    assert all("No campaign-level match" in member["reason_summary"] for member in detail["members"])
+    # Status and decision agree for campaign members.
+    assert all(member["outcome"] == "known_campaign" for member in detail["members"])
+    assert all("Grouped with 1 other incident" in member["reason_summary"] for member in detail["members"])
+    assert detail["label"] == second.json()["campaign_label"]
 
 
 def test_leave_one_out_upload_does_not_add_a_second_incident(tmp_path, monkeypatch):

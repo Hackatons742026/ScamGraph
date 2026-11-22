@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS membership (
   incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
   reason_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(campaign_id, incident_id)
 );
+CREATE TABLE IF NOT EXISTS group_labels (
+  group_id TEXT PRIMARY KEY, level TEXT NOT NULL, number INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS decisions (
   incident_id TEXT PRIMARY KEY REFERENCES incidents(id) ON DELETE CASCADE,
   outcome TEXT NOT NULL, campaign_id TEXT REFERENCES campaigns(id),

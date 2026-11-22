@@ -129,6 +129,7 @@ class GraphResponse(ContractModel):
 
 class ArtifactKindStats(ContractModel):
     total: int; parsed: int; failed: int
+    partial: int = 0  # parsed with gaps (e.g. video without frames); included in ``parsed``
 
 class RunSummary(ContractModel):
     id: str; status: RunStatus

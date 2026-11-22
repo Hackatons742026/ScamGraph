@@ -1,7 +1,7 @@
 """Dev-only (#7): a synthetic live database so the frontend can run with VITE_USE_MOCKS=false without the dataset.
 
-Saves 7 synthetic incidents with evidence, then runs the real engine (link, cluster, leave-one-out classify) exactly
-like backend.api.live.execute_import's analysis step. Every value is synthetic (example-scam.test, fake hashes).
+Saves 7 synthetic incidents with evidence, then runs the same analysis step as backend.api.live.execute_import
+(backend.api.live.analysis_snapshot: link, cluster, decisions consistent with membership). Every value is synthetic (example-scam.test, fake hashes).
 
 Usage (from the repo root, with backend requirements installed):
     SCAMGRAPH_SALT=synthetic-dev-salt python frontend/scripts/seed-synthetic-live-db.py /tmp/scamgraph-synthetic.db
@@ -20,10 +20,8 @@ if Path(sys.argv[1]).exists():
 if Path(sys.argv[1]).resolve().is_relative_to(REPO_ROOT):
     sys.exit("refusing to create a database inside the repository; pass a path outside it (e.g. /tmp/...)")
 sys.path.insert(0, str(REPO_ROOT))
-from backend.api.live import stable_campaign  # noqa: E402
+from backend.api.live import analysis_snapshot  # noqa: E402
 from backend.db import Repository  # noqa: E402
-from backend.engine.linking import link_incidents  # noqa: E402
-from backend.engine.memory import classify, cluster_incidents  # noqa: E402
 from backend.pipeline.models import Artifact, Coverage, Evidence, Incident  # noqa: E402
 
 repo = Repository(sys.argv[1])
@@ -54,29 +52,19 @@ for i, (iid, (kinds, items)) in enumerate(plan.items()):
     repo.save_artifacts([Artifact(art, iid, kinds[0], f"synthetic/{iid}/a.{kinds[0]}", parse_status="ok")])
     repo.save_evidence(iid, [ev(t, tier, fam, h, d, art, 1) for t, tier, fam, h, d in items])
 
-# Analysis: kept in step with backend.api.live.execute_import (link → cluster → leave-one-out classify → save).
-grouped = {row["id"]: [] for row in repo.list_incidents()}
-for row in repo.list_evidence():
-    grouped[row["incident_id"]].append(Evidence(row["type"], row["tier"], row["family"], row["value_hash"], row["display_value"],
-                                                row["weight"], row["artifact_id"], row["funnel_step"], bool(row["ignored"]), row["ignore_reason"]))
-edges = link_incidents(grouped)
-clusters = cluster_incidents(grouped, edges)
+# Analysis: the exact step execute_import runs after parsing.
+edges, groups, decisions, clusters = analysis_snapshot(repo)
+repo.save_analysis(edges, groups, decisions)
+grouped = {row["id"]: None for row in repo.list_incidents()}
 now = datetime.now(timezone.utc).isoformat()
-decisions = []
-for identifier in grouped:
-    memory = cluster_incidents(grouped, edges, exclude_incident=identifier)
-    result = classify(identifier, [e for e in edges if identifier in {e.source, e.target}], memory,
-                      coverage_ok=bool(grouped[identifier]), exclude_incident=identifier)
-    decisions.append({"incident_id": identifier, "outcome": result.outcome, "campaign_id": stable_campaign(result, clusters, identifier),
-                      "reasons": list(result.reasons), "decided_at": now})
-repo.save_analysis(edges, [*clusters.networks, *clusters.campaigns], decisions)
 # Run summary in the shape execute_import writes (live.run() reads `details` and `artifacts_by_kind`).
 stats: dict[str, dict[str, int]] = {}
 for identifier in grouped:
     for item in repo.get_artifacts(identifier):
-        value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0})
+        value = stats.setdefault(item["kind"], {"total": 0, "parsed": 0, "failed": 0, "partial": 0})
         value["total"] += 1
         value["failed" if item["parse_status"] == "failed" else "parsed"] += 1
+        value["partial"] += item["parse_status"] == "partial"
 repo.save_run("run-syn-1", "done", now, finished_at=now, summary={
     "incidents": len(grouped), "details": [{"incident_id": i, "artifacts": len(repo.get_artifacts(i))} for i in grouped],
     "duplicates": 0, "secrets_redacted": 0, "artifacts_by_kind": stats,

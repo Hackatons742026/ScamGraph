@@ -82,8 +82,9 @@ def incident(incident_id: str) -> IncidentDetail:
         decision = Decision(outcome=decision_row["outcome"], campaign_id=decision_row["campaign_id"],
             campaign_label=groups["labels"].get(decision_row["campaign_id"]), reasons=[Reason(kind=reason_kind, text=text, evidence=[])
             for text in __import__("json").loads(decision_row["reasons_json"])], decided_at=decision_row["decided_at"]) if decision_row else None
-        return IncidentDetail(**item.model_dump(), artifacts=artifacts, funnel=[], evidence=evidence,
-            decision=decision, edges=edges)
+        details = repo.artifact_details(a.id for a in artifacts)
+        return IncidentDetail(**item.model_dump(), artifacts=artifacts, funnel=live.funnel(artifacts, details),
+            evidence=evidence, decision=decision, edges=edges)
     if incident_id != seed.INCIDENT.id: raise HTTPException(404, "Incident not found")
     return seed.INCIDENT_DETAIL
 
@@ -95,10 +96,16 @@ def artifact(artifact_id: str) -> ArtifactDetail:
         duplicate_of = repo.duplicate_artifact_map([row]).get(row["id"])
         item = live.artifact(row, duplicate_of=duplicate_of)
         media = repo.list_media(artifact_id)
-        return ArtifactDetail(**item.model_dump(), pages=[], redirect_chain=[], media=[Media(
-            id=m["id"], kind=m["kind"] if m["kind"] in {"screenshot", "frame", "image"} else "image",
-            frame_ts=m["frame_ts"], ocr_text=m["ocr_text"], width=0, height=0) for m in media], ocr_text=None,
-            request_count=0, hosts_display=[])
+        detail = repo.artifact_details([artifact_id])[artifact_id]
+        media_items = []
+        for m in media:
+            width, height = live.media_size(m)
+            media_items.append(Media(id=m["id"],
+                kind=m["kind"] if m["kind"] in {"screenshot", "frame", "image"} else "image",
+                frame_ts=m["frame_ts"], ocr_text=m["ocr_text"], width=width, height=height))
+        return ArtifactDetail(**item.model_dump(), pages=[live.page_summary(p) for p in detail["pages"]],
+            redirect_chain=[live.redirect_hop(h) for h in detail["redirects"]][:100], media=media_items,
+            ocr_text=None, request_count=detail["request_count"], hosts_display=detail["hosts"][:20])
     if artifact_id != seed.ARTIFACT.id: raise HTTPException(404, "Artifact not found")
     return seed.ARTIFACT_DETAIL
 
@@ -139,9 +146,10 @@ def campaign(campaign_id: str) -> CampaignDetail:
 @router.get("/campaigns/{campaign_id}/links", response_model=list[CampaignLink])
 def campaign_links(campaign_id: str) -> list[CampaignLink]:
     if repo := live.repository():
-        if campaign_id not in {row["id"] for row in repo.list_campaigns()}:
+        groups = live.group_context(repo)
+        if campaign_id not in groups["rows_by_id"]:
             raise HTTPException(404, "Campaign not found")
-        return []
+        return live.campaign_links(repo, campaign_id, groups)
     if campaign_id != seed.CAMPAIGN.id: raise HTTPException(404, "Campaign not found")
     return []
 
@@ -220,10 +228,20 @@ async def classify(_request: Request) -> ClassifyResult:
             display=e.display, weight=e.weight, artifact_id=e.artifact_id or "",
             funnel_step=e.funnel_step, ignored=e.ignored, ignore_reason=e.ignore_reason)
             for i, e in enumerate(bundle.evidence)]
-        kind = "match" if result.outcome == "known_campaign" else "conflict" if result.outcome == "needs_review" else "weak"
-        campaign_label = live.group_context(repo)["labels"].get(result.campaign_id) if result.campaign_id else None
-        return ClassifyResult(outcome=result.outcome, campaign_id=result.campaign_id,
-            campaign_label=campaign_label, reasons=[Reason(kind=kind, text=result.reasons[0], evidence=items)],
+        outcome, campaign_id, reason_text = result.outcome, result.campaign_id, result.reasons[0]
+        if not excluded_incident:
+            # Report what was stored, so Classify and the incident list always agree.
+            stored = next((d for d in repo.list_decisions() if d["incident_id"] == bundle.incident.id), None)
+            if stored:
+                outcome, campaign_id = stored["outcome"], stored["campaign_id"]
+                reason_text = next(iter(__import__("json").loads(stored["reasons_json"])), reason_text)
+        kind = "match" if outcome == "known_campaign" else "conflict" if outcome == "needs_review" else "weak"
+        campaign_label = live.group_context(repo)["labels"].get(campaign_id) if campaign_id else None
+        reasons = [Reason(kind=kind, text=reason_text, evidence=items)]
+        reasons.extend(Reason(kind="coverage", text=note, evidence=[])
+                       for note in live.unreadable_artifact_reasons(bundle))
+        return ClassifyResult(outcome=outcome, campaign_id=campaign_id,
+            campaign_label=campaign_label, reasons=reasons,
             coverage=live.coverage(__import__("json").dumps(bundle.coverage.to_dict())), evidence=items,
             candidate_edges=[Edge(id=f"candidate-{i}", source=e.source, target=e.target,
                 level=e.level, tier=e.tier, families=list(e.families), score=e.score,
@@ -248,6 +266,10 @@ def decide_edge(edge_id: str, body: EdgeDecisionRequest) -> EdgeDecisionResponse
     recorded_at = repo.record_edge_decision(edge_id, body.decision, body.note.strip()[:500] if body.note else None)
     if recorded_at is None:
         raise HTTPException(404, "Edge not found")
+    if body.decision == "reject":
+        # A rejected link must stop holding incidents together right away.
+        edges, groups, decisions, _ = live.analysis_snapshot(repo)
+        repo.save_analysis(edges, groups, decisions)
     return EdgeDecisionResponse(edge_id=edge_id, decision=body.decision, recorded_at=recorded_at)
 
 @router.post("/campaigns/merge", response_model=CampaignDetail,
@@ -259,7 +281,7 @@ def merge_campaigns(body: MergeRequest) -> CampaignDetail:
     try:
         campaign_id = repo.merge_campaigns(body.campaign_ids, body.note.strip()[:500] if body.note else None)
     except KeyError as exc:
-        raise HTTPException(404, str(exc)) from None
+        raise HTTPException(404, exc.args[0] if exc.args else "Not found") from None
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     return campaign(campaign_id)
@@ -275,7 +297,7 @@ def split_campaign(body: SplitRequest) -> list[CampaignDetail]:
             body.campaign_id, body.incident_ids, body.note.strip()[:500] if body.note else None
         )
     except KeyError as exc:
-        raise HTTPException(404, str(exc)) from None
+        raise HTTPException(404, exc.args[0] if exc.args else "Not found") from None
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     return [campaign(campaign_id) for campaign_id in campaign_ids]

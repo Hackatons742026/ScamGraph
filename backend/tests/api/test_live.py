@@ -63,7 +63,11 @@ def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
     assert response.status_code == 200 and response.json()["outcome"] in {
         "known_campaign", "new_candidate", "needs_review"}
     assert response.json()["elapsed_ms"] >= 1
-    huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 10_000_001)})
+    # Real HAR captures exceed the old 5 MB cap; the default per-file limit is 50 MB.
+    large = client.post("/api/classify", files={"files": ("capture.txt", b"x" * 6_000_000)})
+    assert large.status_code == 200
+    monkeypatch.setenv("SCAMGRAPH_MAX_UPLOAD_FILE_MB", "1")
+    huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 1_100_000)})
     assert huge.status_code == 413 and huge.json()["error"] == "http_error"
 
 
@@ -125,7 +129,9 @@ def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch)
     assert incidents["inc-a"]["network_id"] == "network-x"
     assert incidents["inc-c"]["campaign_id"] is None
     assert incidents["inc-c"]["network_id"] == "network-x"
-    assert incidents["inc-c"]["coverage"]["badges"] == ["no HAR", "no HTML", "video only"]
+    # Badges name the gaps that weaken a decision, not every absent artifact kind.
+    assert incidents["inc-c"]["coverage"]["badges"] == ["no HAR", "video only"]
+    assert incidents["inc-c"]["coverage"]["level"] == "low"
 
     campaigns = {item["id"]: item for item in client.get("/api/campaigns").json()}
     campaign = campaigns["campaign-x"]
