@@ -203,14 +203,17 @@ def evidence(row: dict) -> EvidenceItem:
         family=row["family"], display=row["display_value"], weight=row["weight"],
         artifact_id=row["artifact_id"] or "", funnel_step=row["funnel_step"],
         ignored=bool(row["ignored"]), ignore_reason=row["ignore_reason"])
-def artifact(row: dict) -> ArtifactSummary:
+def artifact(row: dict, *, duplicate_of: str | None = None) -> ArtifactSummary:
     observations = 1
-    if row["error"] and "observations=" in row["error"]:
-        observations = int(row["error"].rsplit("observations=", 1)[1].split(";", 1)[0])
+    error = row["error"] or ""
+    match = re.search(r"(?:^|;\s*)observations=(\d+)(?:$|;)", error)
+    if match:
+        observations = int(match.group(1))
+        error = re.sub(r"(?:^|;\s*)observations=\d+(?=$|;)", "", error).strip(" ;")
     return ArtifactSummary(id=row["id"], kind=row["kind"],
         name_display=f"Artifact.{row['kind']}", funnel_step=row["funnel_step"],
         role=row["role"] or "unknown", parse_status=row["parse_status"] or "partial",
-        error="Parse failed" if row["error"] else None, captured_at=row["captured_at"], duplicate_of=None,
+        error="Parse failed" if error else None, captured_at=row["captured_at"], duplicate_of=duplicate_of,
         observations=observations)
 def edge(row: dict) -> Edge:
     raw = json.loads(row["evidence_json"] or "[]")

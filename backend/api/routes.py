@@ -69,7 +69,9 @@ def incident(incident_id: str) -> IncidentDetail:
         if not row: raise HTTPException(404, "Incident not found")
         groups = live.group_context(repo)
         item = live.incident(repo, row, groups)
-        artifacts = [live.artifact(a) for a in repo.get_artifacts(incident_id)]
+        artifact_rows = repo.get_artifacts(incident_id)
+        duplicate_of = repo.duplicate_artifact_map(artifact_rows)
+        artifacts = [live.artifact(a, duplicate_of=duplicate_of.get(a["id"])) for a in artifact_rows]
         evidence = [live.evidence(e) for e in repo.get_evidence(incident_id)]
         edges = [live.edge(e) for e in repo.list_edges()
                  if e.get("status") != "rejected" and incident_id in {e["a_incident"], e["b_incident"]}]
@@ -88,7 +90,8 @@ def artifact(artifact_id: str) -> ArtifactDetail:
     if repo := live.repository():
         row = repo.get_artifact(artifact_id)
         if not row: raise HTTPException(404, "Artifact not found")
-        item = live.artifact(row)
+        duplicate_of = repo.duplicate_artifact_map([row]).get(row["id"])
+        item = live.artifact(row, duplicate_of=duplicate_of)
         media = repo.list_media(artifact_id)
         return ArtifactDetail(**item.model_dump(), pages=[], redirect_chain=[], media=[Media(
             id=m["id"], kind=m["kind"] if m["kind"] in {"screenshot", "frame", "image"} else "image",

@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { campaignDetail } from "@/mocks/data";
+import { campaignDetail, incidents } from "@/mocks/data";
 import * as handlers from "@/mocks/handlers";
 import { renderApp } from "@/test/render";
 
@@ -39,6 +39,21 @@ describe("Campaign detail page", () => {
     const timeline = card("Timeline");
     expect(within(timeline).getAllByText("first seen")).toHaveLength(alpha.timeline.length);
     expect(within(timeline).getByText("2026-11-01")).toBeInTheDocument();
+  });
+
+  it("labels leave-one-out classification separately from current campaign membership", async () => {
+    const member = incidents.find((item) => item.id === "inc_alpha_1")!;
+    member.outcome = "new_candidate";
+    member.reason_summary = "No campaign-level match was found with sufficient coverage.";
+    renderApp("/campaigns/camp_alpha");
+
+    await screen.findByRole("heading", { level: 1, name: "Synthetic Campaign Alpha" });
+    const members = card("Members");
+    const row = within(members).getByRole("link", { name: member.label }).closest("tr") as HTMLElement;
+    expect(within(row).getByText("In campaign")).toBeInTheDocument();
+    expect(row).toHaveTextContent(
+      "Latest leave-one-out classification: New Campaign Candidate. No campaign-level match was found with sufficient coverage.",
+    );
   });
 
   it("opens a member link's evidence in the shared edge panel", async () => {

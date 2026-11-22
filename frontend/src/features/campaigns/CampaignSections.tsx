@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EdgePanel } from "@/features/graph/EdgePanel";
 import { EdgeTable } from "@/features/graph/EdgeTable";
 import { EvidenceChips } from "@/features/incident/EvidenceList";
-import { formatDate } from "@/lib/domain";
+import { formatDate, OUTCOME } from "@/lib/domain";
 import { campaignHref } from "./links";
 
 const incidentHref = (id: string) => `/incidents/${encodeURIComponent(id)}`;
@@ -42,7 +42,14 @@ export function MembersCard({ members }: { members: IncidentSummary[] }) {
                   <tr key={m.id} className="border-b border-slate-100 last:border-0">
                     <td className="py-2 pr-3">
                       <Link to={incidentHref(m.id)} className="font-medium text-slate-900 hover:underline">{m.label}</Link>
-                      {m.reason_summary && <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{m.reason_summary}</p>}
+                      {m.reason_summary && (
+                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                          {m.status === "in_campaign" && m.outcome
+                            ? `Latest leave-one-out classification: ${OUTCOME[m.outcome]}. `
+                            : ""}
+                          {m.reason_summary}
+                        </p>
+                      )}
                     </td>
                     <td className="py-2 pr-3"><StatusBadge status={m.status} /></td>
                     <td className="py-2 pr-3"><CoverageBadges coverage={m.coverage} /></td>

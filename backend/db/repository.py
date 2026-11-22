@@ -70,6 +70,27 @@ class Repository:
             rows = db.execute("SELECT * FROM artifacts WHERE incident_id=? ORDER BY id", (incident_id,))
             return [dict(row) for row in rows]
 
+    def duplicate_artifact_map(self, artifacts: Iterable[dict[str, Any]]) -> dict[str, str]:
+        """Map exact duplicate artifact IDs to the first recorded observation."""
+        hashes = sorted({row["sha256"] for row in artifacts if row.get("sha256")})
+        if not hashes:
+            return {}
+        placeholders = ",".join("?" for _ in hashes)
+        with self._connection() as db:
+            rows = db.execute(
+                f"SELECT id,sha256 FROM artifacts WHERE sha256 IN ({placeholders}) ORDER BY rowid",
+                hashes,
+            ).fetchall()
+        canonical: dict[str, str] = {}
+        duplicates: dict[str, str] = {}
+        for row in rows:
+            digest, artifact_id = row["sha256"], row["id"]
+            if digest in canonical:
+                duplicates[artifact_id] = canonical[digest]
+            else:
+                canonical[digest] = artifact_id
+        return duplicates
+
     def get_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         with self._connection() as db:
             row = db.execute("SELECT * FROM artifacts WHERE id=?", (artifact_id,)).fetchone()
