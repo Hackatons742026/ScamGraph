@@ -1,11 +1,14 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Upload } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
-import { api, ApiRequestError, CLASSIFY_MAX_UPLOAD_BYTES, classify, unwrap } from "@/api/client";
-import type { ClassifyResult } from "@/api/types";
+import { ApiRequestError, CLASSIFY_MAX_UPLOAD_BYTES, classify, type ClassifyInput } from "@/api/client";
+import type { ClassifyResult, IncidentSummary } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { USE_MOCKS } from "@/lib/env";
 import { OutcomeCard } from "./OutcomeCard";
+import { fetchIncidents, INCIDENTS_KEY, refreshAfterUpload, type SaveStatus } from "./persistence";
+import { SaveStatusNote } from "./SaveStatusNote";
 
 const ACCEPT =
   ".har,.html,.htm,.mhtml,.mht,image/*,video/*,.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov,application/json,.json";
@@ -15,22 +18,30 @@ function formatLimit(bytes: number) {
   return `${(bytes / 1_000_000).toFixed(bytes % 1_000_000 === 0 ? 0 : 1)} MB`;
 }
 
+type Submission = { result: ClassifyResult; save: SaveStatus };
+
 export function ClassifyForm() {
   const formId = useId();
+  const client = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [excludeIncident, setExcludeIncident] = useState("");
-  const [result, setResult] = useState<ClassifyResult | null>(null);
+  const [submission, setSubmission] = useState<Submission | null>(null);
 
-  const incidents = useQuery({
-    queryKey: ["incidents"],
-    queryFn: () => unwrap(api.GET("/api/incidents")),
-  });
+  const incidents = useQuery({ queryKey: INCIDENTS_KEY, queryFn: fetchIncidents });
 
   const mutation = useMutation({
-    mutationFn: classify,
-    onSuccess: (data) => setResult(data),
+    mutationFn: async (input: ClassifyInput): Promise<Submission> => {
+      const before = client.getQueryData<IncidentSummary[]>(INCIDENTS_KEY);
+      const result = await classify(input);
+      // Live mode stores a normal upload as a new incident and rebuilds the analysis before answering;
+      // leave-one-out and the mock build never store anything.
+      if (USE_MOCKS) return { result, save: { kind: "demo" } };
+      if (input.exclude_incident) return { result, save: { kind: "analysis_only" } };
+      return { result, save: await refreshAfterUpload(client, before) };
+    },
+    onSuccess: (data) => setSubmission(data),
   });
 
   const hasInput = files.length > 0 || !!text.trim() || !!url.trim();
@@ -41,7 +52,7 @@ export function ClassifyForm() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!hasInput || busy || oversize) return;
-    setResult(null);
+    setSubmission(null);
     mutation.mutate({
       files,
       text: text.trim() || undefined,
@@ -68,6 +79,11 @@ export function ClassifyForm() {
           <p className="text-xs text-slate-500">
             Upload HAR, page, image or video files, and/or paste text or a URL. Optional leave-one-out
             excludes an existing incident while classifying.
+          </p>
+          <p className="text-xs text-slate-500">
+            {USE_MOCKS
+              ? "Mock mode: results come from synthetic data and nothing is saved."
+              : "In live mode each submission is saved as a new incident, so later uploads are compared with it. Leave-one-out only analyzes and saves nothing."}
           </p>
         </CardHeader>
         <CardContent>
@@ -127,6 +143,7 @@ export function ClassifyForm() {
                   </option>
                 ))}
               </select>
+              <span className="font-normal text-slate-400">Analysis only: a leave-one-out run is never saved.</span>
               {incidents.isError && (
                 <span className="font-normal text-amber-700">
                   Could not load incidents for leave-one-out. Classify still works without it.{" "}
@@ -158,7 +175,12 @@ export function ClassifyForm() {
         </CardContent>
       </Card>
 
-      {result && <OutcomeCard result={result} />}
+      {submission && (
+        <>
+          <SaveStatusNote status={submission.save} />
+          <OutcomeCard result={submission.result} />
+        </>
+      )}
     </div>
   );
 }
