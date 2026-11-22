@@ -38,6 +38,12 @@ from graph and incident projections. In synthetic mode they return HTTP 501.
 Campaign merge/split accepts an optional note; notes are capped at 500
 characters and stored only in the local audit log.
 
+Live graph, incident, and campaign edge projections include `analyst_override`
+for the latest Confirm/Reject audit record (`decision`, `recorded_at`, and
+optional `note`). This lets clients restore the displayed decision after a
+refresh. Rejected edges remain omitted from those projections; their action and
+note remain in the SQLite audit history.
+
 In live mode, a normal classify request is stored as a new incident with its
 parsed artifacts, evidence, and media in the app-managed cache and database.
 The API rebuilds links, campaigns, and decisions before returning, so later

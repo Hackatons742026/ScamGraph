@@ -147,7 +147,26 @@ class Repository:
 
     def list_edges(self) -> list[dict[str, Any]]:
         with self._connection() as db:
-            return [dict(row) for row in db.execute("SELECT * FROM edges ORDER BY id")]
+            rows = db.execute("""SELECT e.*,
+                a.action AS override_action, a.created_at AS override_recorded_at,
+                a.detail_json AS override_detail_json
+                FROM edges e LEFT JOIN audit_log a ON a.id=(
+                    SELECT MAX(history.id) FROM audit_log history
+                    WHERE history.subject_id=e.id AND history.action IN ('edge.confirm','edge.reject')
+                ) ORDER BY e.id""").fetchall()
+        result = []
+        for row in rows:
+            edge = dict(row)
+            action = edge.pop("override_action")
+            recorded_at = edge.pop("override_recorded_at")
+            detail_json = edge.pop("override_detail_json")
+            edge["analyst_override"] = ({
+                "decision": action.removeprefix("edge."),
+                "recorded_at": recorded_at,
+                "note": json.loads(detail_json or "{}").get("note"),
+            } if action else None)
+            result.append(edge)
+        return result
 
     def list_campaigns(self) -> list[dict[str, Any]]:
         with self._connection() as db:

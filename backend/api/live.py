@@ -224,7 +224,8 @@ def edge(row: dict) -> Edge:
         ignore_reason=None, detail=item.get("detail")) for index, item in enumerate(raw)]
     return Edge(id=row["id"], source=row["a_incident"], target=row["b_incident"],
         level=row["level"], tier=tier, families=families, score=row["score"],
-        comparable=row["comparable"], low_confidence=row["comparable"] < 2, evidence=items)
+        comparable=row["comparable"], low_confidence=row["comparable"] < 2, evidence=items,
+        analyst_override=row.get("analyst_override"))
 def campaign(repo: Repository, row: dict, groups: dict | None = None) -> CampaignSummary:
     groups = groups or group_context(repo)
     members = sorted(groups["members_by_group"].get(row["id"], []))
