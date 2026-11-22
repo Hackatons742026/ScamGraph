@@ -105,6 +105,25 @@ describe("Classify page", () => {
     expect(screen.queryByText(/Saved to live memory/)).not.toBeInTheDocument();
   });
 
+  it("accepts a 16 MB capture and blocks a file over 50 MB before sending", async () => {
+    renderApp("/classify");
+    await screen.findByLabelText(/Leave one out/i);
+    const sized = (name: string, bytes: number) => {
+      const file = new File(["{}"], name, { type: "application/json" });
+      Object.defineProperty(file, "size", { value: bytes });
+      return file;
+    };
+    const input = screen.getByLabelText(/Files/i) as HTMLInputElement;
+    expect(screen.getByText(/Max 50 MB per file · 100 MB total/)).toBeInTheDocument();
+
+    await userEvent.upload(input, sized("capture.har", 16 * 1024 * 1024));
+    expect(screen.getByRole("button", { name: /^Classify$/i })).toBeEnabled();
+
+    await userEvent.upload(input, sized("recording.mp4", 51 * 1024 * 1024));
+    expect(screen.getByRole("button", { name: /^Classify$/i })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("A file is larger than 50 MB");
+  });
+
   it("surfaces ApiRequestError for oversized uploads (413)", async () => {
     vi.spyOn(client, "classify").mockRejectedValue(
       new ApiRequestError(413, { error: "payload_too_large", detail: "Upload exceeds the size limit" }),

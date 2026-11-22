@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Upload } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
-import { ApiRequestError, CLASSIFY_MAX_UPLOAD_BYTES, classify, type ClassifyInput } from "@/api/client";
+import {
+  ApiRequestError,
+  CLASSIFY_MAX_FILE_BYTES,
+  CLASSIFY_MAX_UPLOAD_BYTES,
+  classify,
+  type ClassifyInput,
+} from "@/api/client";
 import type { ClassifyResult, IncidentSummary } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,9 +19,11 @@ import { SaveStatusNote } from "./SaveStatusNote";
 const ACCEPT =
   ".har,.html,.htm,.mhtml,.mht,image/*,video/*,.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov,application/json,.json";
 
+const MB = 1024 * 1024;
+
 function formatLimit(bytes: number) {
-  if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1_000))} KB`;
-  return `${(bytes / 1_000_000).toFixed(bytes % 1_000_000 === 0 ? 0 : 1)} MB`;
+  if (bytes < MB) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / MB).toFixed(bytes % MB === 0 ? 0 : 1)} MB`;
 }
 
 type Submission = { result: ClassifyResult; save: SaveStatus };
@@ -46,7 +54,8 @@ export function ClassifyForm() {
 
   const hasInput = files.length > 0 || !!text.trim() || !!url.trim();
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
-  const oversize = totalBytes > CLASSIFY_MAX_UPLOAD_BYTES;
+  const oversizeFile = files.some((f) => f.size > CLASSIFY_MAX_FILE_BYTES);
+  const oversize = oversizeFile || totalBytes > CLASSIFY_MAX_UPLOAD_BYTES;
   const busy = mutation.isPending;
 
   function onSubmit(e: FormEvent) {
@@ -62,7 +71,9 @@ export function ClassifyForm() {
   }
 
   const errorMessage = oversize
-    ? "Upload exceeds the size limit"
+    ? oversizeFile
+      ? `A file is larger than ${formatLimit(CLASSIFY_MAX_FILE_BYTES)}`
+      : `Upload is larger than ${formatLimit(CLASSIFY_MAX_UPLOAD_BYTES)} in total`
     : mutation.error instanceof ApiRequestError
       ? `${mutation.error.message} (${mutation.error.status})`
       : mutation.error instanceof Error
@@ -98,7 +109,7 @@ export function ClassifyForm() {
                 onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               />
               <span className="font-normal text-slate-400">
-                Max upload {formatLimit(CLASSIFY_MAX_UPLOAD_BYTES)}
+                Max {formatLimit(CLASSIFY_MAX_FILE_BYTES)} per file · {formatLimit(CLASSIFY_MAX_UPLOAD_BYTES)} total
                 {files.length > 0
                   ? ` · ${files.length} selected · ${formatLimit(totalBytes)} total`
                   : ""}
