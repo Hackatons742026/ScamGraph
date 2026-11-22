@@ -52,8 +52,10 @@ Same kind + basename with different digests are linked as **variants**, not merg
 
 Registry in `pipeline/extract/`: HAR / HTML / Ad Library / media extractors emit
 tiered evidence (A/B/C + family). Ignore lists mark rows `ignored=true` with a
-reason instead of dropping them (CDN IPs, public libs, placeholder phones,
-small docs). Per-incident **coverage** lists present/missing artifact kinds.
+reason instead of dropping them (CDN IPs, public libs, shared platform domains
+such as Google or Facebook, placeholder phones, small docs). Per-incident
+**coverage** lists present/missing artifact kinds and flags the gaps that weaken
+a decision (no HAR, media only).
 
 ### 6. Funnel roles (PDF §6.5)
 

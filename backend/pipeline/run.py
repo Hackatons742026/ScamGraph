@@ -18,6 +18,7 @@ from backend.pipeline.asr import transcribe_audio
 from backend.pipeline.dedup import dedupe_artifacts, dedupe_media
 from backend.pipeline.extract import ExtractInput, coverage_for, dedupe_evidence, extract_all
 from backend.pipeline.extract.builders import make_evidence
+from backend.pipeline.extract.ignore import is_third_party_host
 from backend.pipeline.extract.extractors import _SENTENCE_RE
 from backend.pipeline.extract.normalize import norm_text_sentence
 from backend.pipeline.intake.adlib import parse_adlib
@@ -118,6 +119,9 @@ def process_input(
         coverage=parsed["coverage"],
         media=parsed["media"],
         source_paths=[str(p) for p in (paths or [])],
+        requests=parsed["requests"],
+        redirects=parsed["redirects"],
+        pages=parsed["pages"],
     )
 
 
@@ -155,7 +159,8 @@ def run_on_data_dir(
                     inc = parsed["incident"]
                     repo.save_incident(inc)
                     repo.save_artifacts(parsed["artifacts"])
-                    repo.save_evidence(inc.id, parsed["evidence"])
+                    repo.replace_incident_contents(inc.id, parsed["artifacts"], parsed["evidence"])
+                    repo.save_artifact_details(parsed["requests"], parsed["redirects"], parsed["pages"])
                     if parsed["media"]:
                         repo.save_media(parsed["media"])
                 summaries.append(
@@ -206,6 +211,8 @@ def _parse_incident(incident: Incident) -> dict:
     media_pairs: list[tuple[Artifact, MediaRef]] = []
     html_for_funnel: dict = {}
     asr_transcripts: list[tuple[Artifact, str]] = []
+    text_map: dict[str, str] = {}
+    url_map: dict[str, str] = {}
 
     for art in artifacts:
         kind = art.kind.value if isinstance(art.kind, ArtifactKind) else str(art.kind)
@@ -213,6 +220,7 @@ def _parse_incident(incident: Incident) -> dict:
             if kind == ArtifactKind.HAR.value:
                 result = parse_har(art.path)
                 art.parser, art.parse_status, art.error = "har", result.parse_status, result.error
+                art.captured_at = _as_datetime(result.captured_at)
                 har_map[art.id] = result
             elif kind == ArtifactKind.HTML.value:
                 result = parse_html(art.path)
@@ -233,6 +241,8 @@ def _parse_incident(incident: Incident) -> dict:
                     html_for_funnel[art.id] = result.html
                 if result.har is not None:
                     har_map[art.id] = result.har
+                art.captured_at = _as_datetime(result.captured_at) or (
+                    _as_datetime(result.har.captured_at) if result.har is not None else None)
             elif kind == ArtifactKind.IMAGE.value:
                 result = parse_image(art.path, artifact_id=art.id)
                 art.parser, art.parse_status, art.error = "image", result.parse_status, result.error
@@ -260,9 +270,12 @@ def _parse_incident(incident: Incident) -> dict:
             elif kind == ArtifactKind.ADLIB_JSON.value:
                 result = parse_adlib(art.path)
                 art.parser, art.parse_status, art.error = "adlib", result.parse_status, result.error
+                art.captured_at = _as_datetime(result.captured_at)
                 adlib_map[art.id] = result
             elif kind in {ArtifactKind.TEXT.value, ArtifactKind.URL.value}:
                 art.parser = kind
+                content = Path(art.path).read_text(encoding="utf-8", errors="replace")[:200_000]
+                (text_map if kind == ArtifactKind.TEXT.value else url_map)[art.id] = content
                 art.parse_status = ParseStatus.OK
             else:
                 art.parse_status = ParseStatus.PARTIAL
@@ -296,6 +309,8 @@ def _parse_incident(incident: Incident) -> dict:
             html=html_map,
             adlib=adlib_map,
             media=media_pairs,
+            text=text_map,
+            urls=url_map,
         ),
         salt=salt,
     )
@@ -308,15 +323,73 @@ def _parse_incident(incident: Incident) -> dict:
         coverage_for(artifacts, evidence) if asr_transcripts else extracted.coverage
     )
     media = dedupe_media([m for _, m in media_pairs])
+    captured = sorted(a.captured_at for a in artifacts if a.captured_at is not None)
+    if captured:
+        incident.first_seen = incident.first_seen or captured[0]
+        incident.last_seen = incident.last_seen or captured[-1]
     incident.artifacts = artifacts
     incident.coverage = coverage
+    requests, redirects, pages = _artifact_details(artifacts, har_map, html_map)
     return {
         "incident": incident,
         "artifacts": artifacts,
         "evidence": evidence,
         "coverage": coverage,
         "media": media,
+        "requests": requests,
+        "redirects": redirects,
+        "pages": pages,
     }
+
+
+def _as_datetime(value: object) -> datetime | None:
+    """Aware UTC datetime from an RFC 3339 string; None when absent or invalid."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _artifact_details(artifacts: list[Artifact], har_map: dict, html_map: dict) -> tuple[
+    list[dict], list[dict], list[dict]
+]:
+    """Redacted request, redirect and page rows for artifact detail and funnel views."""
+    role_by_id = {a.id: a.role for a in artifacts}
+    requests: list[dict] = []
+    redirects: list[dict] = []
+    pages: list[dict] = []
+    for art_id, har in har_map.items():
+        for req in har.requests:
+            requests.append({"artifact_id": art_id, "seq": req.seq, "method": req.method,
+                "host": req.host, "path_pattern": req.path_pattern, "status": req.status,
+                "server_ip": req.server_ip, "mime": req.mime})
+        for hop in har.redirect_chain:
+            redirects.append({"artifact_id": art_id, "seq": hop.seq, "url_display": hop.url_display,
+                "status": hop.status, "kind": hop.kind})
+        documents = [r for r in har.requests if (r.mime or "").startswith("text/html") and r.host]
+        if documents:
+            own = [r for r in documents if not is_third_party_host(r.host)]
+            final = next((r for r in own if r.status and 200 <= r.status < 300), own[0] if own else None)
+            # Only embedded widgets were captured: there is no first-party page to name.
+            pages.append({"artifact_id": art_id, "url_redacted": documents[0].url_redacted,
+                "final_url": final.url_redacted if final else None,
+                "domain": final.host if final else None, "title": None,
+                "role": role_by_id.get(art_id)})
+    for art_id, html in html_map.items():
+        if art_id in har_map:
+            continue  # bundles: the HAR page row already describes this step
+        pages.append({"artifact_id": art_id, "url_redacted": None, "final_url": None,
+            "domain": None, "title": (html.title or None) and html.title[:200],
+            "role": role_by_id.get(art_id)})
+    return requests, redirects, pages
 
 
 def _evidence_from_transcript(

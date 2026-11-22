@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from backend.pipeline.extract.builders import make_evidence
 from backend.pipeline.extract.normalize import (
+    is_plausible_domain,
     norm_domain_from_url,
     norm_host,
     norm_phone_digits,
@@ -28,7 +29,13 @@ _PHONE_RE = re.compile(
     r"(?<!\d)(?:\+?\d[\d\s\-()]{7,}\d)"
 )
 _IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b")
-_TG_RE = re.compile(r"(?:t\.me/|telegram\.me/|@)([A-Za-z0-9_]{4,})", re.I)
+# ``@handle`` only when not part of an e-mail address or a domain; Telegram
+# usernames are 5-32 characters.
+_TG_RE = re.compile(
+    r"(?:t\.me/|telegram\.me/|(?<![\w.@])@)([A-Za-z0-9_]{5,32})(?![\w.]*\.[A-Za-z]{2,})\b",
+    re.I,
+)
+_URL_RE = re.compile(r"\b(?:https?://|www\.)[^\s\"'<>()]+", re.I)
 _WA_RE = re.compile(r"(?:wa\.me/|whatsapp\.com/send\?phone=)(\+?\d{6,})", re.I)
 _SENTENCE_RE = re.compile(r"[^.!?…]{20,}[.!?…]")
 
@@ -61,7 +68,7 @@ def extract_har(artifact: Artifact, har: HarParseResult, *, salt: str) -> list[E
     param_names: set[str] = set()
     for req in har.requests:
         param_names |= set(param_name_set(req.url_redacted))
-        if req.host:
+        if req.host and is_plausible_domain(req.host):
             host = norm_host(req.host)
             is_click = "/click" in req.path_pattern.lower() or "clickid" in req.url_redacted.lower()
             if is_click:
@@ -173,17 +180,21 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
         )
 
     for asset in html.assets:
+        # Local sidecar files are compared by content; their location is never kept.
+        raw_value = (f"sha256:{asset.content_sha256}" if asset.content_sha256
+                     else asset.path_or_url_redacted)
+        display = _asset_display(asset.path_or_url_redacted)
         if asset.kind == "script":
             out.append(
                 make_evidence(
                     type="js_hash",
                     tier=EvidenceTier.B,
                     family=EvidenceFamily.KIT,
-                    raw_value=asset.path_or_url_redacted,
-                    display=asset.path_or_url_redacted[-60:],
+                    raw_value=raw_value,
+                    display=display,
                     artifact_id=aid,
                     funnel_step=step,
-                    host=asset.path_or_url_redacted,
+                    host=None if asset.local else asset.path_or_url_redacted,
                     salt=salt,
                 )
             )
@@ -193,8 +204,8 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
                     type="content_image",
                     tier=EvidenceTier.B,
                     family=EvidenceFamily.CREATIVE,
-                    raw_value=asset.path_or_url_redacted,
-                    display=asset.path_or_url_redacted[-60:],
+                    raw_value=raw_value,
+                    display=display,
                     artifact_id=aid,
                     funnel_step=step,
                     salt=salt,
@@ -234,6 +245,15 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
                 )
             )
 
+    out.extend(_text_evidence(text, artifact_id=aid, funnel_step=step, salt=salt))
+    return out
+
+
+def _text_evidence(text: str, *, artifact_id: str, funnel_step: int | None,
+                   salt: str) -> list[Evidence]:
+    """Contact identifiers and long sentences from visible or pasted text."""
+    out: list[Evidence] = []
+    aid, step = artifact_id, funnel_step
     for match in _PHONE_RE.finditer(text):
         raw = match.group(0)
         digits = norm_phone_digits(raw)
@@ -271,7 +291,7 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
                 tier=EvidenceTier.A,
                 family=None,
                 raw_value=handle.lower(),
-                display=f"@{handle}",
+                display=_mask_handle(handle),
                 artifact_id=aid,
                 funnel_step=step,
                 salt=salt,
@@ -306,6 +326,62 @@ def extract_html(artifact: Artifact, html: HtmlParseResult, *, salt: str) -> lis
                 display=" ".join(words[:12]) + ("…" if len(words) > 12 else ""),
                 artifact_id=aid,
                 funnel_step=step,
+                salt=salt,
+            )
+        )
+    return out
+
+
+def extract_text(artifact: Artifact, text: str, *, salt: str) -> list[Evidence]:
+    """Evidence from pasted ad text: contacts, sentences and linked domains."""
+    out = _text_evidence(text, artifact_id=artifact.id, funnel_step=artifact.funnel_step, salt=salt)
+    for match in _URL_RE.finditer(text):
+        raw = match.group(0).rstrip(".,;:!?")
+        url = raw if "://" in raw else f"https://{raw}"
+        out.extend(_url_evidence(artifact, url, salt=salt, with_params=False))
+    return out
+
+
+def extract_url(artifact: Artifact, url: str, *, salt: str) -> list[Evidence]:
+    """Evidence from a submitted landing URL: domain and parameter-name set."""
+    url = url.strip()
+    if url and "://" not in url:
+        url = f"https://{url}"
+    return _url_evidence(artifact, url, salt=salt, with_params=True)
+
+
+def _url_evidence(artifact: Artifact, url: str, *, salt: str, with_params: bool) -> list[Evidence]:
+    out: list[Evidence] = []
+    domain = norm_domain_from_url(url)
+    if not domain:
+        return out
+    lowered = url.lower()
+    is_click = "/click" in lowered or "clickid" in lowered
+    out.append(
+        make_evidence(
+            type="click_domain" if is_click else "landing_domain",
+            tier=EvidenceTier.B,
+            family=EvidenceFamily.TDS if is_click else EvidenceFamily.DOMAIN,
+            raw_value=domain,
+            display=domain,
+            artifact_id=artifact.id,
+            funnel_step=artifact.funnel_step,
+            host=domain,
+            salt=salt,
+        )
+    )
+    names = param_name_set(url)
+    if with_params and names:
+        joined = ",".join(sorted(names))
+        out.append(
+            make_evidence(
+                type="url_param_set",
+                tier=EvidenceTier.B,
+                family=EvidenceFamily.KIT,
+                raw_value=joined,
+                display=joined[:80],
+                artifact_id=artifact.id,
+                funnel_step=artifact.funnel_step,
                 salt=salt,
             )
         )
@@ -380,6 +456,20 @@ def extract_media(artifact: Artifact, media: MediaRef, *, salt: str) -> list[Evi
                 )
             )
     return out
+
+
+def _mask_handle(handle: str) -> str:
+    """Mask an account handle like phone numbers: ``@ab…yz``."""
+    if len(handle) <= 4:
+        return "@****"
+    return f"@{handle[:2]}…{handle[-2:]}"
+
+
+def _asset_display(reference: str) -> str:
+    """Short, path-free label for a page asset (file name or remote URL tail)."""
+    if reference.startswith("local:"):
+        return reference[:60]
+    return reference[-60:]
 
 
 def _mask_digits(digits: str) -> str:

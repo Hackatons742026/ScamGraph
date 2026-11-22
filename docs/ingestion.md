@@ -4,12 +4,23 @@ Owned by **cursor-backend** (`backend/pipeline/**`).
 
 ## What it does
 
-1. **Discover** incident folders and artifact kinds (HAR, HTML/`*_files`, MHTML, capture bundle, image, video, Ad Library `*.info.json`, funnel `strona_N`).
+1. **Discover** incident folders and artifact kinds (HAR, HTML/`*_files`, MHTML, capture bundle — also when nested up to four folders deep — image, video, Ad Library `*.info.json` or any small `.json` whose content is an Ad Library record, funnel `strona_N`).
 2. **Parse** each artifact in isolation (`ok` / `partial` / `failed`).
 3. **Redact** secrets before anything is retained (`SCAMGRAPH_SALT` required).
 4. **Dedup** exact duplicates (observation counts) and link variants.
 5. **Extract** tiered evidence (A/B/C + family) with `ignore_reason` kept for explanations.
-6. **Persist** via `backend.db.Repository` only (no raw SQL in the pipeline).
+6. **Persist** via `backend.db.Repository` only (no raw SQL in the pipeline):
+   artifacts, evidence, media, and the redacted HAR requests, redirect hops and
+   pages behind the funnel and artifact-detail views. A re-import replaces an
+   incident's evidence and drops artifacts that are no longer on disk.
+
+Capture times come from HAR `startedDateTime`, capture-bundle manifests and Ad
+Library `timestamp` / `upload_date` / `epoch`; an incident's first and last seen
+dates are the earliest and latest of them. Pasted text and submitted URLs yield
+contact, sentence and domain evidence. Relative links, file names and other
+single-label hosts never become domain evidence, and local file paths never
+reach evidence displays. The Docker image ships `ffmpeg`, so video frames and
+their OCR are part of the containerized pipeline.
 
 ## Commands
 

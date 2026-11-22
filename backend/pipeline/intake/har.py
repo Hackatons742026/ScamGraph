@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import parse_qs, urlsplit
@@ -81,6 +82,7 @@ class HarParseResult:
     hosts: list[str] = field(default_factory=list)
     server_ips: list[str] = field(default_factory=list)
     post_endpoints: list[str] = field(default_factory=list)
+    captured_at: str | None = None  # earliest entry startedDateTime (RFC 3339)
 
 
 def parse_har(path: Path | str, *, salt: str | None = None) -> HarParseResult:
@@ -150,6 +152,7 @@ def _parse_har(path: Path, *, salt: str) -> HarParseResult:
     posts: list[str] = []
     hop_seq = 0
     partial = False
+    started_times: list[datetime] = []
 
     try:
         entry_iter = iter_har_entries(path, salt=salt)
@@ -169,6 +172,9 @@ def _parse_har(path: Path, *, salt: str) -> HarParseResult:
                 if not isinstance(resp_obj, dict):
                     resp_obj = {}
 
+                started = _parse_time(entry.get("startedDateTime"))
+                if started is not None:
+                    started_times.append(started)
                 method = str(req_obj.get("method") or "GET").upper()
                 raw_url = str(req_obj.get("url") or "")
                 url_redacted = redact_url(raw_url, salt=salt)
@@ -306,7 +312,21 @@ def _parse_har(path: Path, *, salt: str) -> HarParseResult:
         hosts=sorted(hosts),
         server_ips=sorted(ips),
         post_endpoints=posts,
+        captured_at=min(started_times).isoformat() if started_times else None,
     )
+
+
+def _parse_time(value: Any) -> datetime | None:
+    """Parse a HAR ``startedDateTime`` into an aware UTC datetime."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _headers_list(raw: Any) -> list[tuple[str, str]]:

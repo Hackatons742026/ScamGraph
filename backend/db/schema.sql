@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS requests (
   seq INTEGER, method TEXT, host TEXT, path_pattern TEXT, status INTEGER,
   server_ip TEXT, mime TEXT, body_sha1 TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_pages_artifact ON pages(artifact_id);
+CREATE INDEX IF NOT EXISTS idx_requests_artifact ON requests(artifact_id);
+CREATE TABLE IF NOT EXISTS redirect_hops (
+  id INTEGER PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL, url_display TEXT NOT NULL, status INTEGER, kind TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_redirect_hops_artifact ON redirect_hops(artifact_id);
 CREATE TABLE IF NOT EXISTS media (
   id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
   kind TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT, phash TEXT,

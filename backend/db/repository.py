@@ -76,6 +76,56 @@ class Repository:
                 captured_at=excluded.captured_at,parser=excluded.parser,
                 parse_status=excluded.parse_status,error=excluded.error""", rows)
 
+    def save_artifact_details(self, requests: Iterable[dict[str, Any]],
+                              redirects: Iterable[dict[str, Any]],
+                              pages: Iterable[dict[str, Any]]) -> None:
+        """Replace stored request, redirect and page rows for the given artifacts."""
+        with self._connection() as db:
+            self._replace_artifact_details(db, requests, redirects, pages)
+
+    @staticmethod
+    def _replace_artifact_details(db: sqlite3.Connection, requests: Iterable[dict[str, Any]],
+                                  redirects: Iterable[dict[str, Any]],
+                                  pages: Iterable[dict[str, Any]]) -> None:
+        requests, redirects, pages = list(requests), list(redirects), list(pages)
+        artifact_ids = sorted({row["artifact_id"] for row in (*requests, *redirects, *pages)})
+        for table in ("requests", "redirect_hops", "pages"):
+            db.executemany(f"DELETE FROM {table} WHERE artifact_id=?", [(i,) for i in artifact_ids])
+        db.executemany("""INSERT INTO requests
+            (artifact_id,seq,method,host,path_pattern,status,server_ip,mime) VALUES (?,?,?,?,?,?,?,?)""",
+            [(r["artifact_id"], r["seq"], r["method"], r["host"], r["path_pattern"], r["status"],
+              r["server_ip"], r["mime"]) for r in requests])
+        db.executemany("""INSERT INTO redirect_hops (artifact_id,seq,url_display,status,kind)
+            VALUES (?,?,?,?,?)""", [(r["artifact_id"], r["seq"], r["url_display"], r["status"], r["kind"])
+                                    for r in redirects])
+        db.executemany("""INSERT INTO pages (artifact_id,url_redacted,final_url,domain,title,role)
+            VALUES (?,?,?,?,?,?)""", [(r["artifact_id"], r["url_redacted"], r["final_url"], r["domain"],
+                                       r["title"], r["role"]) for r in pages])
+
+    def artifact_details(self, artifact_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
+        """Pages, redirect hops, request count and hosts per artifact."""
+        identifiers = sorted(set(artifact_ids))
+        details: dict[str, dict[str, Any]] = {
+            i: {"pages": [], "redirects": [], "request_count": 0, "hosts": []} for i in identifiers}
+        if not identifiers:
+            return details
+        placeholders = ",".join("?" for _ in identifiers)
+        with self._connection() as db:
+            for row in db.execute(f"SELECT * FROM pages WHERE artifact_id IN ({placeholders}) ORDER BY id",
+                                  identifiers):
+                details[row["artifact_id"]]["pages"].append(dict(row))
+            for row in db.execute(f"SELECT * FROM redirect_hops WHERE artifact_id IN ({placeholders}) "
+                                  "ORDER BY artifact_id, seq", identifiers):
+                details[row["artifact_id"]]["redirects"].append(dict(row))
+            for row in db.execute(f"SELECT artifact_id, COUNT(*) AS n FROM requests WHERE artifact_id "
+                                  f"IN ({placeholders}) GROUP BY artifact_id", identifiers):
+                details[row["artifact_id"]]["request_count"] = row["n"]
+            for row in db.execute(f"SELECT artifact_id, host, COUNT(*) AS n FROM requests WHERE artifact_id "
+                                  f"IN ({placeholders}) AND host != '' GROUP BY artifact_id, host "
+                                  "ORDER BY artifact_id, n DESC, host", identifiers):
+                details[row["artifact_id"]]["hosts"].append(row["host"])
+        return details
+
     def get_artifacts(self, incident_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:
             rows = db.execute("SELECT * FROM artifacts WHERE incident_id=? ORDER BY id", (incident_id,))
@@ -120,6 +170,21 @@ class Repository:
                 ON CONFLICT DO UPDATE SET family=excluded.family,tier=excluded.tier,
                 display_value=excluded.display_value,weight=excluded.weight,
                 ignored=excluded.ignored,ignore_reason=excluded.ignore_reason""", rows)
+
+    def replace_incident_contents(self, incident_id: str, artifacts: Iterable[Artifact],
+                                  evidence: Iterable[Evidence]) -> None:
+        """Make stored artifacts and evidence match a fresh parse of the incident.
+
+        A re-import recomputes everything, so evidence from an older run (or an
+        older extractor) and artifacts no longer on disk must not linger.
+        """
+        keep = [item.id for item in artifacts]
+        with self._connection() as db:
+            placeholders = ",".join("?" for _ in keep) or "''"
+            db.execute(f"DELETE FROM artifacts WHERE incident_id=? AND id NOT IN ({placeholders})",
+                       (incident_id, *keep))
+            db.execute("DELETE FROM evidence WHERE incident_id=?", (incident_id,))
+        self.save_evidence(incident_id, evidence)
 
     def get_evidence(self, incident_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:
@@ -267,6 +332,7 @@ class Repository:
                 (incident_id,artifact_id,type,family,tier,value_hash,display_value,weight,
                  funnel_step,ignored,ignore_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)""", evidence_rows)
             db.executemany("INSERT INTO media VALUES (?,?,?,?,?,?,?,?)", media_rows)
+            self._replace_artifact_details(db, bundle.requests, bundle.redirects, bundle.pages)
             self._replace_analysis(db, edges, campaigns, decisions)
             db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
                 (now, "incident.upload", incident.id, detail))

@@ -10,6 +10,8 @@ from backend.pipeline.extract.extractors import (
     extract_har,
     extract_html,
     extract_media,
+    extract_text,
+    extract_url,
 )
 from backend.pipeline.intake.adlib import AdlibParseResult
 from backend.pipeline.intake.har import HarParseResult
@@ -24,6 +26,8 @@ REGISTRY: dict[str, ExtractorFn] = {
     "html": extract_html,
     "adlib": extract_adlib,
     "media": extract_media,
+    "text": extract_text,
+    "url": extract_url,
 }
 
 
@@ -37,6 +41,8 @@ class ExtractInput:
     html: dict[str, HtmlParseResult] = field(default_factory=dict)
     adlib: dict[str, AdlibParseResult] = field(default_factory=dict)
     media: list[tuple[Artifact, MediaRef]] = field(default_factory=list)
+    text: dict[str, str] = field(default_factory=dict)
+    urls: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -79,6 +85,12 @@ def extract_all(data: ExtractInput, *, salt: str | None = None) -> ExtractResult
     for art, media in data.media:
         evidence.extend(REGISTRY["media"](art, media, salt=salt))
 
+    for kind, values in (("text", data.text), ("url", data.urls)):
+        for art_id, value in values.items():
+            art = by_id.get(art_id)
+            if art is not None and value:
+                evidence.extend(REGISTRY[kind](art, value, salt=salt))
+
     evidence = _dedupe_evidence(evidence)
     coverage = coverage_for(data.artifacts, evidence)
     return ExtractResult(evidence=evidence, coverage=coverage)
@@ -96,8 +108,8 @@ def coverage_for(artifacts: list[Artifact], evidence: list[Evidence]) -> Coverag
 
     ev_types = sorted({e.type for e in evidence if not e.ignored})
     notes: list[str] = []
-    if "har" not in kind_counts:
-        notes.append("no HAR")
+    if "har" not in kind_counts and "bundle" not in kind_counts:
+        notes.append("no HAR")  # capture bundles carry their own page.har
     if kind_counts.keys() <= {"image", "video", "adlib_json"}:
         notes.append("video only" if "video" in kind_counts else "media only")
     if ev_types:
