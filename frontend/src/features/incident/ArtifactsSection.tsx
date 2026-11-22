@@ -6,6 +6,7 @@ import { QueryState } from "@/components/domain/QueryState";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { MediaGallery } from "./MediaGallery";
 
 function parseVariant(status: ArtifactSummary["parse_status"]) {
   if (status === "failed") return "danger" as const;
@@ -61,9 +62,7 @@ function ArtifactDetailPanel({ id }: { id: string }) {
             </ol>
           )}
           {art.ocr_text && <p className="mt-2 text-xs text-slate-600">OCR: {art.ocr_text}</p>}
-          {art.media.length > 0 && (
-            <p className="mt-2 text-xs text-slate-500">{art.media.length} media frame(s) available.</p>
-          )}
+          <MediaGallery media={art.media} />
         </div>
       )}
     </QueryState>

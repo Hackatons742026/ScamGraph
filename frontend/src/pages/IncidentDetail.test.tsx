@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as client from "@/api/client";
@@ -47,6 +47,47 @@ describe("Incident detail page", () => {
     await userEvent.click(screen.getByRole("button", { name: /capture\.har/i }));
     expect(await screen.findByText(/42 requests/i)).toBeInTheDocument();
     expect(screen.getByText(/Hosts:.*news\.example-scam\.test/)).toBeInTheDocument();
+  });
+
+  it("shows an artifact's screenshots with OCR text and enlarges one in place", async () => {
+    renderApp("/incidents/inc_alpha_1");
+    await userEvent.click(await screen.findByRole("button", { name: /ad_screenshot\.png/i }));
+
+    const gallery = await screen.findByRole("region", { name: "Media" });
+    const images = within(gallery).getAllByRole("img");
+    expect(images.map((img) => img.getAttribute("alt"))).toEqual(["Screenshot 1", "Screenshot 2", "Screenshot 3"]);
+    // Mock mode never requests real media: every tile is the synthetic placeholder.
+    for (const img of images) expect(img.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+    expect(within(gallery).getAllByText(/OCR: Synthetic OCR text/)).toHaveLength(3);
+
+    await userEvent.click(within(gallery).getByRole("button", { name: "Enlarge Screenshot 2" }));
+    const enlarged = within(gallery).getByRole("figure", { name: "Enlarged Screenshot 2" });
+    expect(within(enlarged).getByRole("img", { name: "Screenshot 2" })).toBeInTheDocument();
+    expect(within(enlarged).getByRole("button", { name: "Close enlarged media" })).toHaveFocus();
+
+    await userEvent.click(within(enlarged).getByRole("button", { name: "Close enlarged media" }));
+    expect(within(gallery).queryByRole("figure", { name: /Enlarged/ })).not.toBeInTheDocument();
+  });
+
+  it("labels video frames by timestamp and falls back to text when an image fails to load", async () => {
+    renderApp("/incidents/inc_delta");
+    await userEvent.click(await screen.findByRole("button", { name: /screen_recording\.mp4/i }));
+
+    const gallery = await screen.findByRole("region", { name: "Media" });
+    const frames = within(gallery).getAllByRole("img");
+    expect(frames.map((img) => img.getAttribute("alt"))).toEqual(["Video frame at 0.0 s", "Video frame at 2.0 s", "Video frame at 4.0 s"]);
+
+    fireEvent.error(frames[1]!);
+    expect(within(gallery).getByRole("img", { name: "Video frame at 2.0 s (unavailable)" })).toHaveTextContent("Image unavailable");
+    expect(within(gallery).queryByRole("button", { name: "Enlarge Video frame at 2.0 s" })).not.toBeInTheDocument();
+    expect(within(gallery).getByRole("button", { name: "Enlarge Video frame at 4.0 s" })).toBeInTheDocument();
+  });
+
+  it("shows no media section for artifacts without media", async () => {
+    renderApp("/incidents/inc_alpha_1");
+    await userEvent.click(await screen.findByRole("button", { name: /capture\.har/i }));
+    expect(await screen.findByText(/42 requests/i)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Media" })).not.toBeInTheDocument();
   });
 
   it("shows loading then data", async () => {
