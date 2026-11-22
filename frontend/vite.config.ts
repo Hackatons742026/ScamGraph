@@ -18,6 +18,9 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: false,
     env: { VITE_USE_MOCKS: "true" },
+    // jsdom suites run in parallel; the 5 s default times out in resource-limited
+    // containers (docker compose run frontend-tests) although every test passes locally.
+    testTimeout: 20_000,
     // Node --test scripts under scripts/ (e.g. openapi-equal) are not Vitest suites.
     exclude: ["**/node_modules/**", "**/dist/**", "scripts/**"],
   },
