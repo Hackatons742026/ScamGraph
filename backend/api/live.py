@@ -205,13 +205,38 @@ def evidence(row: dict) -> EvidenceItem:
         ignored=bool(row["ignored"]), ignore_reason=row["ignore_reason"])
 def artifact(row: dict) -> ArtifactSummary:
     observations = 1
-    if row["error"] and "observations=" in row["error"]:
-        observations = int(row["error"].rsplit("observations=", 1)[1].split(";", 1)[0])
+    error = row.get("error") or ""
+    if "observations=" in error:
+        observations = int(error.rsplit("observations=", 1)[1].split(";", 1)[0])
+        error = error.rsplit("observations=", 1)[0].rstrip("; ")
     return ArtifactSummary(id=row["id"], kind=row["kind"],
         name_display=f"Artifact.{row['kind']}", funnel_step=row["funnel_step"],
         role=row["role"] or "unknown", parse_status=row["parse_status"] or "partial",
-        error="Parse failed" if row["error"] else None, captured_at=row["captured_at"], duplicate_of=None,
+        error=safe_artifact_error(row["kind"], row["parse_status"], error),
+        captured_at=row["captured_at"], duplicate_of=None,
         observations=observations)
+
+def safe_artifact_error(kind: str, status: str | None, error: str | None) -> str | None:
+    """Return a useful parser hint without exposing paths or exception details."""
+    if not error:
+        return None
+    if kind != "image":
+        return "Parse failed"
+
+    message = error.casefold()
+    if any(token in message for token in (
+        "unidentifiedimage", "cannot identify image", "malformed", "corrupt image",
+        "image could not be decoded",
+    )):
+        return "Image could not be decoded. Upload a valid PNG, JPEG, or WEBP image."
+    if status == "failed":
+        return "Image could not be processed. Verify that it is a valid PNG, JPEG, or WEBP image."
+    if "no ocr engine" in message or "tesseract" in message or "pol failed" in message:
+        return "Image saved, but Polish OCR is unavailable. Install Tesseract with Polish language data."
+    if "preprocess unavailable" in message:
+        return "Image could not be decoded or prepared. Check that it is a valid PNG, JPEG, or WEBP image."
+    return "Image saved, but optional OCR processing was incomplete."
+
 def edge(row: dict) -> Edge:
     raw = json.loads(row["evidence_json"] or "[]")
     tiers = [item.get("tier", "C") for item in raw]
