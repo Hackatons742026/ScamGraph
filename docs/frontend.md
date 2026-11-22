@@ -68,8 +68,8 @@ src/mocks/        data.ts (synthetic fixtures), handlers.ts (mock transport)
 src/components/   ui/ (shadcn-style primitives), domain/ (TierBadge, FamilyLabel, CoverageBadges,
                   OutcomeBadge, QueryState), layout/ (AppShell, PageHeader)
 src/lib/          domain.ts (all user-facing labels + tier/family colours), env.ts, utils.ts
-src/features/     per-screen components that the pages compose: overview/, incidents/, incident/, graph/,
-                  classify/, review/, eval/
+src/features/     per-screen components that the pages compose: overview/, incidents/, incident/, campaigns/,
+                  graph/, classify/, review/, eval/, overrides/
 src/pages/        one component per route (routes in src/routes.tsx)
 ```
 
@@ -91,10 +91,11 @@ src/pages/        one component per route (routes in src/routes.tsx)
 
 | Route | Screen | What it shows |
 |---|---|---|
-| `/` | Overview | Latest run: counts of incidents, artifacts, campaigns, networks, unassigned, Needs Review and new candidates, plus artifact coverage by kind. **Run import** shows the import's progress. Before the first import, an empty state explains what to do. |
+| `/` | Overview | Latest run: counts of incidents, artifacts, campaigns, networks, unassigned, Needs Review and new candidates, plus artifact coverage by kind. **Run import** shows the import's progress; when the run settles, incidents, artifacts, campaigns and graph views are refreshed. Before the first import, an empty state explains what to do. |
 | `/incidents` | Incidents | Every incident with its status, coverage badges, artifact count, last seen and campaign. Filter by status and coverage, and sort by column. |
-| `/incidents/:id` | Incident detail | Status, outcome and coverage. Decision card with the reasons. Evidence list (tier, family, masked value, source artifact, funnel step). Funnel steps. Artifacts with parse status and media counts. |
-| `/campaigns` | Campaigns | Campaigns and networks by size, with first/last seen and the strongest evidence. Each row opens the graph focused on that group. |
+| `/incidents/:id` | Incident detail | Status, outcome and coverage. Decision card with the reasons. Evidence list (tier, family, masked value, source artifact, funnel step). Funnel steps. Artifacts with parse status; selecting one loads its detail, including a gallery of screenshots and video frames (`GET /api/media/{id}` via `mediaUrl()`, synthetic placeholders in mock mode) with OCR text, click-to-enlarge and a text fallback when an image fails to load. |
+| `/campaigns` | Campaigns | Campaigns and networks by size, with first/last seen and the strongest evidence. A name opens the group's detail page; **Graph** opens the graph focused on it. Merge, split and per-campaign exports. |
+| `/campaigns/:id` | Campaign detail | One campaign or network (`GET /api/campaigns/{id}` + `/links`): level, size, dates, strongest evidence, parent network or member campaigns, members with status and coverage, links between members with the graph's evidence panel (confirm/reject), related groups with shared evidence, and the timeline when the API has one. Graph focus, exports and split for campaigns. Campaign labels elsewhere (incidents, incident detail, decision, review, classify) link here. |
 | `/graph` | Investigation graph | Cytoscape (fcose) graph with campaign, network and Unassigned groups. Edge style follows tier (A thick, B coloured by family, C dashed, low confidence greyed), and the legend is always shown. Tier and level filters are applied by the API. A link opens an evidence panel. The table view lists every link and every incident and works by keyboard. `?campaign=` focuses on one group. |
 | `/classify` | Classify | Upload files, paste text or give a URL, with optional leave-one-out. Result: Known Campaign, New Campaign Candidate or Needs Review, with reasons and coverage. In live mode a normal submission is saved as a new incident: the page re-reads the incident list, confirms the save with a link to the new incident, and marks incidents, campaigns, graph and run views stale. Leave-one-out says it was analysis only; mock mode says nothing was saved; an unchanged list after a live submission means the server has no live database. |
 | `/review` | Review queue | Incidents that are Needs Review or unassigned, with the reason for each. |

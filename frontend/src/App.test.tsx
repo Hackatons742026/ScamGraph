@@ -20,6 +20,7 @@ describe("app shell (mock mode)", () => {
     ["/incidents", "Incidents"],
     ["/incidents/inc_x", "Incident detail"],
     ["/campaigns", "Campaigns"],
+    ["/campaigns/camp_x", "Campaign detail"],
     ["/graph", "Investigation graph"],
     ["/classify", "Classify new material"],
     ["/review", "Review queue"],

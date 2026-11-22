@@ -6,6 +6,7 @@ import { CoverageBadges, OutcomeBadge, StatusBadge } from "@/components/domain/b
 import { QueryState } from "@/components/domain/QueryState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { campaignHref } from "@/features/campaigns/links";
 import { ArtifactsSection } from "@/features/incident/ArtifactsSection";
 import { DecisionCard } from "@/features/incident/DecisionCard";
 import { EvidenceList } from "@/features/incident/EvidenceList";
@@ -51,7 +52,14 @@ export function IncidentDetail() {
                       <CardTitle className="text-base">{detail.label}</CardTitle>
                       <p className="mt-1 text-xs text-slate-500">
                         {detail.artifact_count} artifacts
-                        {detail.campaign_label ? ` · ${detail.campaign_label}` : ""}
+                        {detail.campaign_label && (
+                          <>
+                            {" · "}
+                            <Link to={campaignHref(detail.campaign_id)} className="text-slate-700 underline-offset-2 hover:underline">
+                              {detail.campaign_label}
+                            </Link>
+                          </>
+                        )}
                         {detail.first_seen ? ` · first seen ${new Date(detail.first_seen).toLocaleDateString()}` : ""}
                       </p>
                     </div>

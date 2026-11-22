@@ -1,5 +1,6 @@
 import type { RouteObject } from "react-router";
 import { AppShell } from "@/components/layout/AppShell";
+import { CampaignDetail } from "@/pages/CampaignDetail";
 import { Campaigns } from "@/pages/Campaigns";
 import { Classify } from "@/pages/Classify";
 import { Evaluation } from "@/pages/Evaluation";
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
       { path: "incidents", element: <Incidents /> },
       { path: "incidents/:id", element: <IncidentDetail /> },
       { path: "campaigns", element: <Campaigns /> },
+      { path: "campaigns/:id", element: <CampaignDetail /> },
       { path: "graph", element: <Graph /> },
       { path: "classify", element: <Classify /> },
       { path: "review", element: <Review /> },

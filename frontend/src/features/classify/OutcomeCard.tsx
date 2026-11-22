@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import type { ClassifyResult, Outcome } from "@/api/types";
 import { CoverageBadges, OutcomeBadge } from "@/components/domain/badges";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { campaignHref } from "@/features/campaigns/links";
 import { EvidenceChips } from "@/features/incident/EvidenceList";
 import { OUTCOME } from "@/lib/domain";
 
@@ -28,7 +29,7 @@ export function OutcomeCard({ result }: { result: ClassifyResult }) {
           <p className="text-sm text-slate-700">
             Campaign:{" "}
             <Link
-              to="/campaigns"
+              to={campaignHref(result.campaign_id)}
               className="font-medium text-slate-900 underline-offset-2 hover:underline"
             >
               {result.campaign_label}

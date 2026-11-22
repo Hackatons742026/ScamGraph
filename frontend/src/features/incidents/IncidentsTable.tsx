@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { CoverageLevel, IncidentStatus, IncidentSummary } from "@/api/types";
 import { CoverageBadges, StatusBadge } from "@/components/domain/badges";
+import { campaignHref } from "@/features/campaigns/links";
 import { STATUS } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -182,7 +183,15 @@ export function IncidentsTable({
                   </td>
                   <td className="px-3 py-2.5 tabular-nums text-slate-700">{incident.artifact_count}</td>
                   <td className="px-3 py-2.5 text-slate-600">{formatWhen(incident.last_seen)}</td>
-                  <td className="px-3 py-2.5 text-slate-600">{incident.campaign_label ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {incident.campaign_label ? (
+                      <Link to={campaignHref(incident.campaign_id)} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {incident.campaign_label}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

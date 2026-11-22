@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import type { IncidentSummary } from "@/api/types";
 import { CoverageBadges, OutcomeBadge, StatusBadge } from "@/components/domain/badges";
+import { campaignHref } from "@/features/campaigns/links";
 
 function reasonText(incident: IncidentSummary) {
   return incident.reason_summary?.trim() || "No reason summary available.";
@@ -23,7 +24,7 @@ export function ReviewQueue({ incidents }: { incidents: IncidentSummary[] }) {
               {incident.campaign_label && (
                 <p className="mt-1 text-xs text-slate-500">
                   Campaign:{" "}
-                  <Link to="/campaigns" className="underline-offset-2 hover:underline">
+                  <Link to={campaignHref(incident.campaign_id)} className="underline-offset-2 hover:underline">
                     {incident.campaign_label}
                   </Link>
                 </p>

@@ -35,10 +35,15 @@ describe("Campaigns", () => {
     expect(rows()).toHaveLength(campaigns.filter((c) => c.level === "campaign").length);
   });
 
-  it("links each campaign to the graph focused on it", async () => {
-    renderApp("/campaigns");
-    const c = campaigns[0]!;
-    expect(await screen.findByRole("link", { name: c.label })).toHaveAttribute("href", `/graph?campaign=${c.id}`);
+  it("links each group to its detail page and to the graph focused on it", async () => {
+    const { router } = renderApp("/campaigns");
+    for (const c of campaigns) {
+      expect(await screen.findByRole("link", { name: c.label })).toHaveAttribute("href", `/campaigns/${c.id}`);
+      expect(screen.getByRole("link", { name: `Open ${c.label} in the graph` })).toHaveAttribute("href", `/graph?campaign=${c.id}`);
+    }
+    await userEvent.click(screen.getByRole("link", { name: campaigns[0]!.label }));
+    expect(router.state.location.pathname).toBe(`/campaigns/${campaigns[0]!.id}`);
+    expect(await screen.findByRole("heading", { level: 1, name: campaigns[0]!.label })).toBeInTheDocument();
   });
 
   it("shows first/last seen as dates and an em dash for missing dates or evidence", async () => {
