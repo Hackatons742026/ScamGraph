@@ -7,6 +7,24 @@ from backend.pipeline.models import Artifact, ArtifactKind, Coverage, Incident, 
 client = TestClient(app)
 
 
+def test_valid_image_artifact_detail_has_no_parse_error(tmp_path, monkeypatch):
+    db_path = tmp_path / "valid-image-detail.db"
+    monkeypatch.setenv("SCAMGRAPH_DB", str(db_path))
+    repo = Repository(db_path)
+    repo.save_incident(Incident("synthetic-valid-image-case", "synthetic", coverage=Coverage()))
+    repo.save_artifacts([Artifact(
+        id="synthetic-valid-image-artifact", incident_id="synthetic-valid-image-case",
+        kind=ArtifactKind.IMAGE, path="media/synthetic.png", parser="image",
+        parse_status=ParseStatus.OK,
+    )])
+
+    response = client.get("/api/artifacts/synthetic-valid-image-artifact")
+
+    assert response.status_code == 200
+    assert response.json()["parse_status"] == "ok"
+    assert response.json()["error"] is None
+
+
 def test_artifact_detail_returns_saved_ocr_and_safe_partial_image_message(tmp_path, monkeypatch):
     db_path = tmp_path / "image-detail.db"
     monkeypatch.setenv("SCAMGRAPH_DB", str(db_path))
