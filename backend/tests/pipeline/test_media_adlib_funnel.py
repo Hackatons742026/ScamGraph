@@ -43,6 +43,36 @@ def test_image_parse_hashes_and_caches(tmp_path: Path) -> None:
     assert cached.is_file()
 
 
+@pytest.mark.parametrize(("suffix", "image_format"), [
+    (".png", "PNG"), (".jpg", "JPEG"), (".webp", "WEBP"),
+])
+def test_image_parser_accepts_common_formats_without_changing_phash(
+    tmp_path: Path, suffix: str, image_format: str,
+) -> None:
+    image = pytest.importorskip("PIL.Image")
+    path = tmp_path / f"synthetic{suffix}"
+    image.new("RGB", (32, 24), "white").save(path, format=image_format)
+
+    result = parse_image(path, artifact_id=f"art-{image_format.lower()}")
+
+    assert result.parse_status in {ParseStatus.OK, ParseStatus.PARTIAL}
+    assert result.media is not None and result.media.sha256
+    assert result.media.phash
+
+
+def test_malformed_image_fails_with_safe_error_and_no_media(tmp_path: Path) -> None:
+    pytest.importorskip("PIL.Image")
+    path = tmp_path / "malformed.png"
+    path.write_bytes(b"not a valid image")
+
+    result = parse_image(path, artifact_id="art-malformed")
+
+    assert result.parse_status == ParseStatus.FAILED
+    assert result.error == "Image could not be decoded. Upload a valid PNG, JPEG, or WEBP image."
+    assert str(path) not in (result.error or "")
+    assert result.media is None
+
+
 @pytest.mark.skipif(
     not ocr_stack_available(),
     reason="tesseract + Pillow + pytesseract not all available",

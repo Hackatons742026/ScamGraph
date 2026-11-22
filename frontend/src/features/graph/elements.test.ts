@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GraphResponse } from "@/api/types";
 import { FAMILY, TIER } from "@/lib/domain";
-import { edgeVisual, LOW_CONFIDENCE_COLOR, toElements } from "./elements";
+import { edgeVisual, LOW_CONFIDENCE_COLOR, stylesheet, toElements } from "./elements";
 
 describe("edgeVisual (must match the legend)", () => {
   it("tier A is thick and solid in the tier colour", () => {
@@ -76,5 +76,16 @@ describe("toElements", () => {
     expect(byId("i1")!.classes).toContain("low-coverage");
     expect(byId("i1")!.classes).toContain("needs-review");
     expect(byId("i2")!.classes).toBe("incident");
+  });
+
+  it("wraps graph labels and aligns compound headings inside their boundaries", () => {
+    expect(stylesheet).toContainEqual(expect.objectContaining({
+      selector: "node",
+      style: expect.objectContaining({ "text-wrap": "wrap", "text-max-width": "92px", "text-halign": "center" }),
+    }));
+    expect(stylesheet).toContainEqual(expect.objectContaining({
+      selector: ":parent",
+      style: expect.objectContaining({ "text-wrap": "wrap", "text-halign": "left", padding: "22px" }),
+    }));
   });
 });

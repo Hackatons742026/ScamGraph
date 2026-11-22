@@ -53,6 +53,8 @@ def detect_artifact_kind(path: Path) -> ArtifactKind | None:
 
     if name.endswith(".info.json"):
         return ArtifactKind.ADLIB_JSON
+    if suffix == ".json" and name.lower() != "manifest.json" and _small_file(path) and looks_like_adlib(path):
+        return ArtifactKind.ADLIB_JSON
 
     if suffix in {".mhtml", ".mht"}:
         return ArtifactKind.MHTML
@@ -97,18 +99,14 @@ def _scan_folder(
             if step is not None:
                 artifacts.extend(_scan_folder(child, incident_id, funnel_step=step))
 
-    # 2) Capture-bundle directories (have manifest.json).
+    # 2) Capture-bundle directories (have manifest.json), also when an export
+    #    tool nested them a few folders deep (``capture/capture/manifest.json``).
     bundle_roots: set[Path] = set()
-    for child in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
-        if not child.is_dir():
-            continue
-        if funnel_step_from_name(child.name) is not None:
-            continue
-        if (child / "manifest.json").is_file():
-            bundle_roots.add(child.resolve())
-            artifacts.append(
-                _make_artifact(incident_id, ArtifactKind.BUNDLE, child, funnel_step)
-            )
+    for child in _nested_bundle_dirs(folder):
+        bundle_roots.add(child.resolve())
+        artifacts.append(
+            _make_artifact(incident_id, ArtifactKind.BUNDLE, child, funnel_step)
+        )
 
     # Bundle rooted at this folder itself.
     if (folder / "manifest.json").is_file():
@@ -192,6 +190,34 @@ def _coverage_from_artifacts(artifacts: list[Artifact]) -> Coverage:
         kinds_missing=[k for k in expected if k not in counts],
         artifact_counts=counts,
     )
+
+
+_MAX_BUNDLE_DEPTH = 4
+_MAX_ADLIB_BYTES = 2 * 1024 * 1024
+
+
+def _nested_bundle_dirs(folder: Path, depth: int = 1) -> list[Path]:
+    """Bundle roots below ``folder`` that are not funnel steps or page sidecars."""
+    found: list[Path] = []
+    for child in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if funnel_step_from_name(child.name) is not None:
+            continue
+        if child.name.endswith("_files") or child.name in {"resources", "__MACOSX"}:
+            continue
+        if (child / "manifest.json").is_file():
+            found.append(child)
+        elif depth < _MAX_BUNDLE_DEPTH:
+            found.extend(_nested_bundle_dirs(child, depth + 1))
+    return found
+
+
+def _small_file(path: Path) -> bool:
+    try:
+        return path.stat().st_size <= _MAX_ADLIB_BYTES
+    except OSError:
+        return False
 
 
 def _stable_id(prefix: str, material: str) -> str:

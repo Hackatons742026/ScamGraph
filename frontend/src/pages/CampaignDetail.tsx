@@ -14,7 +14,7 @@ import { LinksCard, MembersCard, RelatedGroupsCard, TimelineCard } from "@/featu
 import { ExportLinks } from "@/features/campaigns/ExportLinks";
 import { campaignHref, graphFocusHref } from "@/features/campaigns/links";
 import { SplitDialog } from "@/features/overrides/SplitDialog";
-import { formatDate, humanize } from "@/lib/domain";
+import { formatTimestamp, humanize } from "@/lib/domain";
 
 function Summary({ campaign, onSplit }: { campaign: CampaignDetailType; onSplit: () => void }) {
   // Same cache entry as the Campaigns list: names the parent network and, for a network, its campaigns.
@@ -31,10 +31,15 @@ function Summary({ campaign, onSplit }: { campaign: CampaignDetailType; onSplit:
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle className="text-base">{campaign.label}</CardTitle>
             <Badge variant={isCampaign ? "danger" : "outline"}>{campaign.level}</Badge>
+            {isCampaign && (
+              <Badge variant="outline">
+                {campaign.membership_source === "manual" ? "Manual analyst group" : "Automatic links"}
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-slate-500">
-            {campaign.size} incident{campaign.size === 1 ? "" : "s"} · first seen {formatDate(campaign.first_seen)} · last seen{" "}
-            {formatDate(campaign.last_seen)}
+            {campaign.size} incident{campaign.size === 1 ? "" : "s"} · source first seen {formatTimestamp(campaign.first_seen)} · source last seen{" "}
+            {formatTimestamp(campaign.last_seen)}
           </p>
           <p className="text-xs text-slate-500">
             {isCampaign

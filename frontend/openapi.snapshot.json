@@ -1031,14 +1031,14 @@
             "description": "Unprocessable Entity"
           },
           "501": {
-            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Not Implemented"
           }
         }
       }
@@ -1099,7 +1099,7 @@
             }
           },
           "501": {
-            "description": "Successful Response",
+            "description": "Not Implemented",
             "content": {
               "application/json": {
                 "schema": {
@@ -1171,16 +1171,11 @@
             }
           },
           "501": {
-            "description": "Successful Response",
+            "description": "Not Implemented",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse",
-                  "items": {
-                    "$ref": "#/components/schemas/CampaignDetail"
-                  },
-                  "type": "array",
-                  "title": "Response Split Campaign Api Campaigns Split Post"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1313,6 +1308,40 @@
           "loo_routing"
         ],
         "title": "Ablation"
+      },
+      "AnalystEdgeOverride": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "recorded_at": {
+            "type": "string",
+            "title": "Recorded At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "recorded_at"
+        ],
+        "title": "AnalystEdgeOverride"
       },
       "ArtifactDetail": {
         "properties": {
@@ -1483,6 +1512,11 @@
           "failed": {
             "type": "integer",
             "title": "Failed"
+          },
+          "partial": {
+            "type": "integer",
+            "title": "Partial",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -1652,6 +1686,15 @@
             ],
             "title": "Network Id"
           },
+          "membership_source": {
+            "type": "string",
+            "enum": [
+              "automatic",
+              "manual"
+            ],
+            "title": "Membership Source",
+            "default": "automatic"
+          },
           "members": {
             "items": {
               "$ref": "#/components/schemas/IncidentSummary"
@@ -1789,6 +1832,15 @@
               }
             ],
             "title": "Network Id"
+          },
+          "membership_source": {
+            "type": "string",
+            "enum": [
+              "automatic",
+              "manual"
+            ],
+            "title": "Membership Source",
+            "default": "automatic"
           }
         },
         "additionalProperties": false,
@@ -2066,6 +2118,16 @@
             },
             "type": "array",
             "title": "Evidence"
+          },
+          "analyst_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalystEdgeOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -2584,6 +2646,17 @@
             ],
             "title": "Reason Summary"
           },
+          "ingested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingested At"
+          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ArtifactSummary"
@@ -2750,6 +2823,17 @@
               }
             ],
             "title": "Reason Summary"
+          },
+          "ingested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingested At"
           }
         },
         "additionalProperties": false,

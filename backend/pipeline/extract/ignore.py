@@ -24,6 +24,21 @@ _PUBLIC_LIB_HOST_FRAGMENTS = (
     "fastly",
 )
 
+# Large shared platforms that appear on unrelated pages (share buttons, app
+# store badges, login widgets). A shared link to one of them is not operator
+# infrastructure, so domain evidence on these hosts never creates an edge.
+_PLATFORM_DOMAINS = (
+    "google.com", "google.pl", "youtube.com", "youtu.be", "goo.gl",
+    "googleadservices.com", "googlesyndication.com", "doubleclick.net",
+    "google-analytics.com", "facebook.com", "facebook.net", "fb.com", "fb.me",
+    "fbcdn.net", "instagram.com", "messenger.com", "whatsapp.com", "wa.me",
+    "twitter.com", "x.com", "t.co", "tiktok.com", "linkedin.com", "pinterest.com",
+    "reddit.com", "telegram.org", "t.me", "apple.com", "microsoft.com",
+    "live.com", "bing.com", "yahoo.com", "wikipedia.org", "w3.org", "schema.org",
+    "gravatar.com", "wordpress.org", "wp.com", "amazonaws.com", "cloudfront.net",
+)
+_PLATFORM_EVIDENCE_TYPES = {"landing_domain", "click_domain"}
+
 # Simplified CDN / shared-hosting ranges (documentation / common edges).
 _CDN_NETWORKS = [
     ipaddress.ip_network("103.21.244.0/22"),  # Cloudflare sample
@@ -66,12 +81,28 @@ def ignore_reason_for(
         return "public_lib"
     if host and any(frag in norm_host(host) for frag in _PUBLIC_LIB_HOST_FRAGMENTS):
         return "public_lib"
+    if evidence_type in _PLATFORM_EVIDENCE_TYPES and is_platform_domain(host or display):
+        return "platform_domain"
 
     if evidence_type in {"phone", "phone_number"}:
         if _placeholder_phone(display) or (value and _placeholder_phone(value)):
             return "placeholder_phone"
 
     return None
+
+
+def is_platform_domain(host: str | None) -> bool:
+    """True when ``host`` is (a subdomain of) a large shared platform."""
+    name = norm_host(host or "")
+    return any(name == domain or name.endswith("." + domain) for domain in _PLATFORM_DOMAINS)
+
+
+def is_third_party_host(host: str | None) -> bool:
+    """Embedded widgets, trackers and public CDNs: never the funnel page itself."""
+    if not host:
+        return False
+    name = norm_host(host)
+    return is_platform_domain(name) or any(frag in name for frag in _PUBLIC_LIB_HOST_FRAGMENTS)
 
 
 def _cdn_ip_reason(ip: str) -> str | None:

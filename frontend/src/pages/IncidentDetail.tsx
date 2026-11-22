@@ -10,6 +10,7 @@ import { campaignHref } from "@/features/campaigns/links";
 import { ArtifactsSection } from "@/features/incident/ArtifactsSection";
 import { DecisionCard } from "@/features/incident/DecisionCard";
 import { EvidenceList } from "@/features/incident/EvidenceList";
+import { shortUrl } from "@/lib/domain";
 
 async function fetchIncident(id: string): Promise<IncidentDetailType | null> {
   try {
@@ -77,7 +78,10 @@ export function IncidentDetail() {
                 </Card>
 
                 <DecisionCard decision={detail.decision} />
-                <EvidenceList evidence={detail.evidence} />
+                <EvidenceList
+                  evidence={detail.evidence}
+                  artifactNames={Object.fromEntries(detail.artifacts.map((a) => [a.id, a.name_display]))}
+                />
                 <ArtifactsSection artifacts={detail.artifacts} />
 
                 {detail.funnel.length > 0 && (
@@ -92,6 +96,18 @@ export function IncidentDetail() {
                             <span className="font-medium">Step {step.step}</span>
                             <span className="text-slate-500"> · {step.role}</span>
                             {step.domain_display && <span className="text-slate-700"> · {step.domain_display}</span>}
+                            {step.redirect_chain.length > 0 && (
+                              <ol className="mt-1 space-y-0.5 text-xs text-slate-500" aria-label={`Redirects in step ${step.step}`}>
+                                {step.redirect_chain.map((hop) => (
+                                  <li key={hop.seq} className="break-all">
+                                    {hop.kind === "3xx" ? (hop.status ?? "3xx") : hop.kind} →{" "}
+                                    <span className="font-mono" title={hop.url_display}>
+                                      {shortUrl(hop.url_display)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
                           </li>
                         ))}
                       </ol>

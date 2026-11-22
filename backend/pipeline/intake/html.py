@@ -43,6 +43,8 @@ class HtmlAsset:
     path_or_url_redacted: str
     is_library: bool = False
     local: bool = False
+    # SHA-256 of a saved-page sidecar file (``*_files/``); None for remote URLs.
+    content_sha256: str | None = None
 
 
 @dataclass
@@ -94,16 +96,17 @@ def _parse_html(path: Path, *, salt: str) -> HtmlParseResult:
             visible_text=_normalize_ws(parser.visible_text),
         )
 
-    base = f"file://{path.resolve().as_posix()}"
+    # Resolve relative references against a neutral base: the page's location on
+    # disk must never end up in links, form actions or evidence displays.
     links = [
-        redact_url(urljoin(base, href), salt=salt)
+        redact_url(_resolve_ref(href), salt=salt)
         for href in parser.links
         if href and not href.startswith("#")
     ]
     forms = [
         HtmlForm(
             action_redacted=(
-                redact_url(urljoin(base, form.action), salt=salt) if form.action else None
+                redact_url(_resolve_ref(form.action), salt=salt) if form.action else None
             ),
             method=(form.method or "get").lower(),
             field_names=list(form.fields),
@@ -112,30 +115,36 @@ def _parse_html(path: Path, *, salt: str) -> HtmlParseResult:
     ]
 
     files_dir = _sibling_files_dir(path)
-    local_names = _list_local_files(files_dir) if files_dir else set()
+    local_index = _local_file_index(files_dir) if files_dir else {}
+    local_names = set(local_index)
 
     assets: list[HtmlAsset] = []
-    for src in parser.images:
-        resolved = urljoin(base, src)
-        local = _is_local_ref(src, local_names)
-        assets.append(
-            HtmlAsset(
-                kind="image",
-                path_or_url_redacted=redact_url(resolved, salt=salt),
-                local=local,
+    for kind, sources in (("image", parser.images), ("script", parser.scripts)):
+        for src in sources:
+            local = _is_local_ref(src, local_names)
+            if local:
+                name = _ref_name(src)
+                local_path = local_index.get(name) or local_index.get(name.rsplit("/", 1)[-1])
+                display = f"local:{name.rsplit('/', 1)[-1]}"
+                digest = _file_sha256(local_path) if local_path else None
+            elif _resolve_ref(src).startswith("file:"):
+                # Relative reference without a saved copy (e.g. a capture bundle's
+                # resources/): keep only its file name.
+                local = True
+                display = f"local:{_ref_name(src).rsplit('/', 1)[-1] or 'asset'}"
+                digest = None
+            else:
+                display = redact_url(_resolve_ref(src), salt=salt)
+                digest = None
+            assets.append(
+                HtmlAsset(
+                    kind=kind,
+                    path_or_url_redacted=display,
+                    is_library=kind == "script" and _is_library(src),
+                    local=local,
+                    content_sha256=digest,
+                )
             )
-        )
-    for src in parser.scripts:
-        resolved = urljoin(base, src)
-        local = _is_local_ref(src, local_names)
-        assets.append(
-            HtmlAsset(
-                kind="script",
-                path_or_url_redacted=redact_url(resolved, salt=salt),
-                is_library=_is_library(src),
-                local=local,
-            )
-        )
 
     skeleton = None
     skeleton_hash = None
@@ -252,20 +261,48 @@ def _sibling_files_dir(html_path: Path) -> Path | None:
 
 
 def _list_local_files(files_dir: Path) -> set[str]:
-    names: set[str] = set()
-    for p in files_dir.rglob("*"):
+    return set(_local_file_index(files_dir))
+
+
+def _local_file_index(files_dir: Path) -> dict[str, Path]:
+    """Map lower-cased sidecar file names and relative paths to their files."""
+    index: dict[str, Path] = {}
+    for p in sorted(files_dir.rglob("*")):
         if p.is_file():
-            names.add(p.name.lower())
-            names.add(p.relative_to(files_dir).as_posix().lower())
-    return names
+            index.setdefault(p.name.lower(), p)
+            index.setdefault(p.relative_to(files_dir).as_posix().lower(), p)
+    return index
+
+
+def _ref_name(ref: str) -> str:
+    return ref.split("?")[0].split("#")[0].replace("\\", "/").lower()
 
 
 def _is_local_ref(ref: str, local_names: set[str]) -> bool:
     if not ref or ref.startswith(("http://", "https://", "data:", "//")):
         return False
-    name = ref.split("?")[0].split("#")[0].replace("\\", "/").lower()
+    name = _ref_name(ref)
     base = name.rsplit("/", 1)[-1]
     return name in local_names or base in local_names
+
+
+def _resolve_ref(ref: str) -> str:
+    """Absolute URL for remote references; a root-relative ``file:`` URL otherwise."""
+    if ref.startswith("//"):
+        return "https:" + ref
+    return urljoin("file:///", ref)
+
+
+_MAX_HASH_BYTES = 25 * 1024 * 1024
+
+
+def _file_sha256(path: Path) -> str | None:
+    try:
+        if path.stat().st_size > _MAX_HASH_BYTES:
+            return None
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def _is_library(src: str) -> bool:

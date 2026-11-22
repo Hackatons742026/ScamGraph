@@ -1,5 +1,8 @@
 import json
 import sqlite3
+from io import BytesIO
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -170,6 +173,112 @@ def test_uploaded_image_media_is_stored_and_served_from_app_cache(tmp_path, monk
     media = repo.list_media(artifact["id"])
     assert len(media) == 1
     assert client.get(f"/api/media/{media[0]['id']}").content.startswith(b"\x89PNG")
+
+
+def test_artifact_observation_metadata_does_not_look_like_a_parse_error():
+    from backend.api.live import artifact as artifact_projection
+
+    summary = artifact_projection({
+        "id": "synthetic-artifact", "kind": "image", "funnel_step": None,
+        "role": "ad", "parse_status": "ok", "error": "observations=2", "captured_at": None,
+    })
+    assert summary.observations == 2
+    assert summary.error is None
+
+
+def _synthetic_webp(color: str) -> bytes:
+    image = pytest.importorskip("PIL.Image")
+    draw_module = pytest.importorskip("PIL.ImageDraw")
+    canvas = image.new("RGB", (160, 100), color)
+    draw_module.Draw(canvas).rectangle((24, 20, 136, 80), fill="white" if color == "black" else "black")
+    stream = BytesIO()
+    canvas.save(stream, format="WEBP")
+    return stream.getvalue()
+
+
+def test_identical_webp_uploads_stay_separate_and_show_exact_duplicate(tmp_path, monkeypatch):
+    db_path = tmp_path / "duplicate-live.db"
+    monkeypatch.setenv("SCAMGRAPH_DB", str(db_path))
+    monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("SCAMGRAPH_SALT", "synthetic-duplicate-salt")
+    content = _synthetic_webp("white")
+
+    first = client.post("/api/classify", files={"files": ("first.webp", content, "image/webp")})
+    assert first.status_code == 200
+    repo = Repository(db_path)
+    first_incident = repo.list_incidents()[0]
+    first_artifact = repo.get_artifacts(first_incident["id"])[0]
+
+    second = client.post("/api/classify", files={"files": ("second.webp", content, "image/webp")})
+    assert second.status_code == 200
+    uploaded = [row for row in repo.list_incidents() if row["title"] == "Uploaded material"]
+    assert len(uploaded) == 2  # Preserve each upload as its own source observation.
+    second_incident = next(row for row in uploaded if row["id"] != first_incident["id"])
+    second_artifact = repo.get_artifacts(second_incident["id"])[0]
+    assert first_artifact["sha256"] == second_artifact["sha256"]
+
+    first_summary = client.get(f"/api/incidents/{first_incident['id']}").json()["artifacts"][0]
+    second_summary = client.get(f"/api/incidents/{second_incident['id']}").json()["artifacts"][0]
+    assert first_summary["duplicate_of"] is None
+    assert second_summary["duplicate_of"] == first_artifact["id"]
+    assert client.get(f"/api/artifacts/{second_artifact['id']}").json()["duplicate_of"] == first_artifact["id"]
+    assert second.json()["outcome"] != "known_campaign"  # One image match must not force a campaign.
+
+
+def test_webp_visual_variant_has_own_digest_and_phash_without_duplicate_merge(tmp_path, monkeypatch):
+    pytest.importorskip("imagehash")
+    db_path = tmp_path / "variant-live.db"
+    monkeypatch.setenv("SCAMGRAPH_DB", str(db_path))
+    monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("SCAMGRAPH_SALT", "synthetic-variant-salt")
+    samples = [_synthetic_webp("white"), _synthetic_webp("black")]
+
+    responses = [client.post("/api/classify", files={
+        "files": (f"variant-{index}.webp", content, "image/webp"),
+    }) for index, content in enumerate(samples)]
+    assert all(response.status_code == 200 for response in responses)
+    repo = Repository(db_path)
+    incidents = [row for row in repo.list_incidents() if row["title"] == "Uploaded material"]
+    artifacts = [repo.get_artifacts(row["id"])[0] for row in incidents]
+    media = [repo.list_media(artifact["id"])[0] for artifact in artifacts]
+    assert artifacts[0]["sha256"] != artifacts[1]["sha256"]
+    assert media[0]["phash"] and media[1]["phash"]
+    assert media[0]["phash"] != media[1]["phash"]
+    assert all(item["duplicate_of"] is None for item in
+               [client.get(f"/api/incidents/{row['id']}").json()["artifacts"][0] for row in incidents])
+    assert all(response.json()["outcome"] != "known_campaign" for response in responses)
+
+
+def test_tier_a_telegram_campaign_is_created_after_upload_reanalysis(tmp_path, monkeypatch):
+    db_path = tmp_path / "telegram-live.db"
+    monkeypatch.setenv("SCAMGRAPH_DB", str(db_path))
+    monkeypatch.setenv("SCAMGRAPH_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("SCAMGRAPH_SALT", "synthetic-telegram-salt")
+    repo = Repository(db_path)
+    for index in range(6):
+        repo.save_incident(Incident(f"synthetic-background-{index}", "synthetic", coverage=Coverage()))
+
+    def upload(name: str, headline: str):
+        html = f"<html><head><title>{headline}</title></head><body><p>{headline}</p>" \
+               "<p>Follow our official Telegram channel t.me/SyntheticOfferChannel88 today.</p></body></html>"
+        return client.post("/api/classify", files={"files": (name, html.encode(), "text/html")})
+
+    first = upload("offer-a.html", "Synthetic Offer Alpha")
+    assert first.status_code == 200 and first.json()["outcome"] == "new_candidate"
+    second = upload("offer-b.html", "Synthetic Offer Beta")
+    # Classify reports the stored result: the second upload now forms a campaign with the first.
+    assert second.status_code == 200 and second.json()["outcome"] == "known_campaign"
+    assert second.json()["campaign_label"]
+
+    campaigns = [row for row in repo.list_campaigns() if row["level"] == "campaign"]
+    assert len(campaigns) == 1
+    detail = client.get(f"/api/campaigns/{campaigns[0]['id']}").json()
+    assert len(detail["members"]) == 2
+    assert all(member["status"] == "in_campaign" for member in detail["members"])
+    # Status and decision agree for campaign members.
+    assert all(member["outcome"] == "known_campaign" for member in detail["members"])
+    assert all("Grouped with 1 other incident" in member["reason_summary"] for member in detail["members"])
+    assert detail["label"] == second.json()["campaign_label"]
 
 
 def test_leave_one_out_upload_does_not_add_a_second_incident(tmp_path, monkeypatch):

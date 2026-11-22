@@ -1,0 +1,17 @@
+# Opt-in batch import: mount a host dataset folder read-only at /data so
+# "Run import" (POST /api/import) can process it. Use it on top of the live stack:
+#
+#   SCAMGRAPH_IMPORT_DIR=/absolute/path/to/dataset \
+#     docker compose -f compose.live.yaml -f compose.import.yaml up --build -d
+#
+# Each top-level folder of the dataset becomes one incident. The folder is mounted
+# read-only; the pipeline writes only to the app's database and cache volume.
+services:
+  app:
+    environment:
+      SCAMGRAPH_DATA_DIR: /data
+    volumes:
+      - type: bind
+        source: ${SCAMGRAPH_IMPORT_DIR:?Set SCAMGRAPH_IMPORT_DIR to the absolute path of the dataset folder}
+        target: /data
+        read_only: true

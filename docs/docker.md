@@ -101,3 +101,24 @@ docker compose -f compose.live.yaml down
 
 Do not use `down -v` unless you intend to erase the saved uploads, analysis
 database, and cache for this project name.
+
+## Import a dataset folder
+
+**Run import** (`POST /api/import`) processes a dataset directory mounted at
+`/data`. Neither stack mounts one by default, so the demo stack answers
+"SCAMGRAPH_DATA_DIR is not configured". Add `compose.import.yaml` to the live
+stack and point `SCAMGRAPH_IMPORT_DIR` at the dataset root; each top-level
+folder becomes one incident:
+
+```bash
+export SCAMGRAPH_LIVE_PROJECT_NAME=scamgraph-dataset
+export SCAMGRAPH_SALT='your-stable-private-salt'
+export SCAMGRAPH_IMPORT_DIR="/absolute/path/to/dataset"
+docker compose -f compose.live.yaml -f compose.import.yaml up --build -d
+```
+
+Open <http://localhost:8001> and click **Run import**. The folder is mounted
+read-only; results go to the collection's database and cache volume. Running
+the import again on the same folder does not create duplicate incidents. Use
+the same three variables (and both `-f` files) for later `ps`, `down`, and `up`
+commands.

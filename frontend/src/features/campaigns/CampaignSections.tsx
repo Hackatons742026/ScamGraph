@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EdgePanel } from "@/features/graph/EdgePanel";
 import { EdgeTable } from "@/features/graph/EdgeTable";
 import { EvidenceChips } from "@/features/incident/EvidenceList";
-import { formatDate } from "@/lib/domain";
+import { formatDate, formatTimestamp, OUTCOME } from "@/lib/domain";
 import { campaignHref } from "./links";
 
 const incidentHref = (id: string) => `/incidents/${encodeURIComponent(id)}`;
@@ -27,14 +27,15 @@ export function MembersCard({ members }: { members: IncidentSummary[] }) {
           <p className="text-sm text-slate-500">No member incidents.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+              <table className="w-full min-w-[48rem] text-left text-sm">
               <thead className="border-b border-slate-200 text-xs text-slate-500">
                 <tr>
                   <th className="py-2 pr-3 font-medium">Incident</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
                   <th className="py-2 pr-3 font-medium">Coverage</th>
                   <th className="py-2 pr-3 text-right font-medium">Artifacts</th>
-                  <th className="py-2 font-medium">Last seen</th>
+                  <th className="py-2 pr-3 font-medium">Source last seen</th>
+                  <th className="py-2 font-medium">Ingested</th>
                 </tr>
               </thead>
               <tbody>
@@ -42,12 +43,21 @@ export function MembersCard({ members }: { members: IncidentSummary[] }) {
                   <tr key={m.id} className="border-b border-slate-100 last:border-0">
                     <td className="py-2 pr-3">
                       <Link to={incidentHref(m.id)} className="font-medium text-slate-900 hover:underline">{m.label}</Link>
-                      {m.reason_summary && <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{m.reason_summary}</p>}
+                      {m.reason_summary && (
+                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                          {/* Decisions agree with membership after re-analysis; older databases may still differ. */}
+                          {m.status === "in_campaign" && m.outcome && m.outcome !== "known_campaign"
+                            ? `Classified as ${OUTCOME[m.outcome]} before grouping. `
+                            : ""}
+                          {m.reason_summary}
+                        </p>
+                      )}
                     </td>
                     <td className="py-2 pr-3"><StatusBadge status={m.status} /></td>
                     <td className="py-2 pr-3"><CoverageBadges coverage={m.coverage} /></td>
                     <td className="py-2 pr-3 text-right tabular-nums">{m.artifact_count}</td>
-                    <td className="py-2 tabular-nums text-slate-600">{formatDate(m.last_seen)}</td>
+                    <td className="py-2 pr-3 tabular-nums text-slate-600">{formatTimestamp(m.last_seen)}</td>
+                    <td className="py-2 tabular-nums text-slate-600">{formatTimestamp(m.ingested_at)}</td>
                   </tr>
                 ))}
               </tbody>

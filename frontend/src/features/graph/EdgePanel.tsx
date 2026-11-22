@@ -53,7 +53,7 @@ export function EdgePanel({ edge, nodes, onClose }: Props) {
         <p className="text-xs text-slate-600">A shared site kit alone means shared tooling: a network link only. Whether these are one campaign is left to the analyst.</p>
       )}
       <LinkEvidence evidence={edge.evidence} />
-      <EdgeDecisionActions edgeId={edge.id} />
+      <EdgeDecisionActions edge={edge} />
     </aside>
   );
 }

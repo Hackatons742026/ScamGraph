@@ -74,6 +74,6 @@ def test_image_and_non_image_parse_errors_are_safe_and_specific(tmp_path, monkey
 
     assert malformed.status_code == html.status_code == 200
     assert malformed.json()["error"] == "Image could not be decoded. Upload a valid PNG, JPEG, or WEBP image."
-    assert html.json()["error"] == "Parse failed"
+    assert html.json()["error"] == "Saved page could not be parsed. Save it again as a complete web page."
     assert "/private/secrets" not in malformed.text + html.text
     assert "UnidentifiedImageError" not in malformed.text

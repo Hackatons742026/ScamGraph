@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,7 @@ class AdlibParseResult:
     title: str | None = None
     extractor: str | None = None
     raw_keys: list[str] | None = None
+    captured_at: str | None = None
 
 
 def parse_adlib(path: Path | str, *, salt: str | None = None) -> AdlibParseResult:
@@ -88,7 +90,31 @@ def _parse(path: Path, *, salt: str) -> AdlibParseResult:
         title=title,
         extractor=extractor_s,
         raw_keys=sorted(str(k) for k in data.keys()),
+        captured_at=_captured_at(data),
     )
+
+
+def _captured_at(data: dict) -> str | None:
+    """yt-dlp ``timestamp``, ``upload_date`` (YYYYMMDD), or download ``epoch``."""
+    stamp = data.get("timestamp")
+    if isinstance(stamp, (int, float)) and stamp > 0:
+        try:
+            return datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            pass
+    day = data.get("upload_date")
+    if isinstance(day, str) and len(day) == 8 and day.isdigit():
+        try:
+            return datetime.strptime(day, "%Y%m%d").replace(tzinfo=timezone.utc).isoformat()
+        except ValueError:
+            pass
+    epoch = data.get("epoch")  # when yt-dlp captured the ad
+    if isinstance(epoch, (int, float)) and epoch > 0:
+        try:
+            return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+    return None
 
 
 def _first_str(data: dict, keys: tuple[str, ...]) -> str | None:

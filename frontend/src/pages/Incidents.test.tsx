@@ -72,7 +72,7 @@ describe("Incidents page", () => {
         .filter((el) => el.getAttribute("href")?.startsWith("/incidents/"))
         .map((el) => el.textContent);
     const labelsAsc = incidentLabels();
-    expect(labelsAsc).toEqual([...labelsAsc].sort((a, b) => a!.localeCompare(b!)));
+    expect(labelsAsc).toEqual([...labelsAsc].sort((a, b) => a!.localeCompare(b!, undefined, { numeric: true })));
 
     await userEvent.click(within(table).getByRole("button", { name: /Incident/i }));
     const labelsDesc = incidentLabels();

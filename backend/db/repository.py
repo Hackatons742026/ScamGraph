@@ -23,6 +23,10 @@ def _scalar(value: Any) -> Any:
     return value
 
 
+# Membership rows that belong to campaign-level groups (networks are kept on replay).
+_CAMPAIGN_MEMBERSHIP = "campaign_id IN (SELECT id FROM campaigns WHERE level='campaign')"
+
+
 class Repository:
     """Small repository with one transaction per public save operation."""
 
@@ -34,13 +38,24 @@ class Repository:
     def _connection(self) -> sqlite3.Connection:
         return connect(self.path)
 
+    def health_check(self) -> None:
+        """Confirm the initialized SQLite database is readable and consistent."""
+        with self._connection() as db:
+            result = db.execute("PRAGMA quick_check").fetchone()
+        if result is None or result[0] != "ok":
+            raise sqlite3.DatabaseError("SQLite integrity check failed")
+
     def save_incident(self, incident: Incident) -> None:
+        ingested_at = datetime.now(timezone.utc).isoformat()
         values = (
             incident.id, incident.folder, incident.title, _scalar(incident.first_seen),
             _scalar(incident.last_seen), json.dumps(incident.coverage.to_dict()), incident.status,
+            ingested_at,
         )
         with self._connection() as db:
-            db.execute("""INSERT INTO incidents VALUES (?,?,?,?,?,?,?)
+            db.execute("""INSERT INTO incidents
+                (id,folder,title,first_seen,last_seen,coverage_json,status,ingested_at)
+                VALUES (?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET folder=excluded.folder,title=excluded.title,
                 first_seen=excluded.first_seen,last_seen=excluded.last_seen,
                 coverage_json=excluded.coverage_json,status=excluded.status""", values)
@@ -65,10 +80,81 @@ class Repository:
                 captured_at=excluded.captured_at,parser=excluded.parser,
                 parse_status=excluded.parse_status,error=excluded.error""", rows)
 
+    def save_artifact_details(self, requests: Iterable[dict[str, Any]],
+                              redirects: Iterable[dict[str, Any]],
+                              pages: Iterable[dict[str, Any]]) -> None:
+        """Replace stored request, redirect and page rows for the given artifacts."""
+        with self._connection() as db:
+            self._replace_artifact_details(db, requests, redirects, pages)
+
+    @staticmethod
+    def _replace_artifact_details(db: sqlite3.Connection, requests: Iterable[dict[str, Any]],
+                                  redirects: Iterable[dict[str, Any]],
+                                  pages: Iterable[dict[str, Any]]) -> None:
+        requests, redirects, pages = list(requests), list(redirects), list(pages)
+        artifact_ids = sorted({row["artifact_id"] for row in (*requests, *redirects, *pages)})
+        for table in ("requests", "redirect_hops", "pages"):
+            db.executemany(f"DELETE FROM {table} WHERE artifact_id=?", [(i,) for i in artifact_ids])
+        db.executemany("""INSERT INTO requests
+            (artifact_id,seq,method,host,path_pattern,status,server_ip,mime) VALUES (?,?,?,?,?,?,?,?)""",
+            [(r["artifact_id"], r["seq"], r["method"], r["host"], r["path_pattern"], r["status"],
+              r["server_ip"], r["mime"]) for r in requests])
+        db.executemany("""INSERT INTO redirect_hops (artifact_id,seq,url_display,status,kind)
+            VALUES (?,?,?,?,?)""", [(r["artifact_id"], r["seq"], r["url_display"], r["status"], r["kind"])
+                                    for r in redirects])
+        db.executemany("""INSERT INTO pages (artifact_id,url_redacted,final_url,domain,title,role)
+            VALUES (?,?,?,?,?,?)""", [(r["artifact_id"], r["url_redacted"], r["final_url"], r["domain"],
+                                       r["title"], r["role"]) for r in pages])
+
+    def artifact_details(self, artifact_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
+        """Pages, redirect hops, request count and hosts per artifact."""
+        identifiers = sorted(set(artifact_ids))
+        details: dict[str, dict[str, Any]] = {
+            i: {"pages": [], "redirects": [], "request_count": 0, "hosts": []} for i in identifiers}
+        if not identifiers:
+            return details
+        placeholders = ",".join("?" for _ in identifiers)
+        with self._connection() as db:
+            for row in db.execute(f"SELECT * FROM pages WHERE artifact_id IN ({placeholders}) ORDER BY id",
+                                  identifiers):
+                details[row["artifact_id"]]["pages"].append(dict(row))
+            for row in db.execute(f"SELECT * FROM redirect_hops WHERE artifact_id IN ({placeholders}) "
+                                  "ORDER BY artifact_id, seq", identifiers):
+                details[row["artifact_id"]]["redirects"].append(dict(row))
+            for row in db.execute(f"SELECT artifact_id, COUNT(*) AS n FROM requests WHERE artifact_id "
+                                  f"IN ({placeholders}) GROUP BY artifact_id", identifiers):
+                details[row["artifact_id"]]["request_count"] = row["n"]
+            for row in db.execute(f"SELECT artifact_id, host, COUNT(*) AS n FROM requests WHERE artifact_id "
+                                  f"IN ({placeholders}) AND host != '' GROUP BY artifact_id, host "
+                                  "ORDER BY artifact_id, n DESC, host", identifiers):
+                details[row["artifact_id"]]["hosts"].append(row["host"])
+        return details
+
     def get_artifacts(self, incident_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:
             rows = db.execute("SELECT * FROM artifacts WHERE incident_id=? ORDER BY id", (incident_id,))
             return [dict(row) for row in rows]
+
+    def duplicate_artifact_map(self, artifacts: Iterable[dict[str, Any]]) -> dict[str, str]:
+        """Map exact duplicate artifact IDs to the first recorded observation."""
+        hashes = sorted({row["sha256"] for row in artifacts if row.get("sha256")})
+        if not hashes:
+            return {}
+        placeholders = ",".join("?" for _ in hashes)
+        with self._connection() as db:
+            rows = db.execute(
+                f"SELECT id,sha256 FROM artifacts WHERE sha256 IN ({placeholders}) ORDER BY rowid",
+                hashes,
+            ).fetchall()
+        canonical: dict[str, str] = {}
+        duplicates: dict[str, str] = {}
+        for row in rows:
+            digest, artifact_id = row["sha256"], row["id"]
+            if digest in canonical:
+                duplicates[artifact_id] = canonical[digest]
+            else:
+                canonical[digest] = artifact_id
+        return duplicates
 
     def get_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         with self._connection() as db:
@@ -88,6 +174,21 @@ class Repository:
                 ON CONFLICT DO UPDATE SET family=excluded.family,tier=excluded.tier,
                 display_value=excluded.display_value,weight=excluded.weight,
                 ignored=excluded.ignored,ignore_reason=excluded.ignore_reason""", rows)
+
+    def replace_incident_contents(self, incident_id: str, artifacts: Iterable[Artifact],
+                                  evidence: Iterable[Evidence]) -> None:
+        """Make stored artifacts and evidence match a fresh parse of the incident.
+
+        A re-import recomputes everything, so evidence from an older run (or an
+        older extractor) and artifacts no longer on disk must not linger.
+        """
+        keep = [item.id for item in artifacts]
+        with self._connection() as db:
+            placeholders = ",".join("?" for _ in keep) or "''"
+            db.execute(f"DELETE FROM artifacts WHERE incident_id=? AND id NOT IN ({placeholders})",
+                       (incident_id, *keep))
+            db.execute("DELETE FROM evidence WHERE incident_id=?", (incident_id,))
+        self.save_evidence(incident_id, evidence)
 
     def get_evidence(self, incident_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:
@@ -176,13 +277,31 @@ class Repository:
         with self._connection() as db:
             return [dict(row) for row in db.execute("SELECT * FROM membership ORDER BY campaign_id,incident_id")]
 
+    def manual_campaign_ids(self) -> set[str]:
+        """Return extant campaign IDs touched by analyst Merge/Split operations."""
+        with self._connection() as db:
+            campaigns = {row[0] for row in db.execute("SELECT id FROM campaigns WHERE level='campaign'")}
+            rows = db.execute("""SELECT action,subject_id,detail_json FROM audit_log
+                WHERE action IN ('campaign.merge','campaign.split') ORDER BY id""").fetchall()
+        manual: set[str] = set()
+        for row in rows:
+            detail = json.loads(row["detail_json"] or "{}")
+            if row["action"] == "campaign.merge":
+                candidates = [row["subject_id"], *detail.get("campaign_ids", [])]
+            else:
+                candidates = [row["subject_id"], detail.get("new_campaign_id")]
+            manual.update(identifier for identifier in candidates if identifier in campaigns)
+        return manual
+
     def save_uploaded_bundle(self, bundle: IncidentBundle,
                              analysis: Callable[[], tuple[Iterable[Any], Iterable[Any], Iterable[dict[str, Any]]]]) -> None:
         """Serialize analysis and atomically add an upload with its derived state."""
         incident = bundle.incident
+        now = datetime.now(timezone.utc).isoformat()
         incident_values = (
             incident.id, incident.folder, incident.title, _scalar(incident.first_seen),
             _scalar(incident.last_seen), json.dumps(incident.coverage.to_dict()), incident.status,
+            now,
         )
         artifact_rows = [(
             item.id, item.incident_id, _scalar(item.kind), item.path, item.funnel_step,
@@ -201,14 +320,15 @@ class Repository:
             "evidence_count": len(evidence_rows),
             "media_count": len(media_rows),
         })
-        now = datetime.now(timezone.utc).isoformat()
         with self._connection() as db:
             # Acquire the writer lock before reading existing memory so concurrent
             # uploads cannot replace derived state computed from the same snapshot.
             db.execute("PRAGMA busy_timeout = 30000")
             db.execute("BEGIN IMMEDIATE")
             edges, campaigns, decisions = analysis()
-            db.execute("INSERT INTO incidents VALUES (?,?,?,?,?,?,?)", incident_values)
+            db.execute("""INSERT INTO incidents
+                (id,folder,title,first_seen,last_seen,coverage_json,status,ingested_at)
+                VALUES (?,?,?,?,?,?,?,?)""", incident_values)
             db.executemany("""INSERT INTO artifacts
                 (id,incident_id,kind,path,funnel_step,role,sha256,captured_at,parser,parse_status,error)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)""", artifact_rows)
@@ -216,6 +336,7 @@ class Repository:
                 (incident_id,artifact_id,type,family,tier,value_hash,display_value,weight,
                  funnel_step,ignored,ignore_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)""", evidence_rows)
             db.executemany("INSERT INTO media VALUES (?,?,?,?,?,?,?,?)", media_rows)
+            self._replace_artifact_details(db, bundle.requests, bundle.redirects, bundle.pages)
             self._replace_analysis(db, edges, campaigns, decisions)
             db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
                 (now, "incident.upload", incident.id, detail))
@@ -311,6 +432,7 @@ class Repository:
                 detail["note"] = note
             db.execute("INSERT INTO audit_log (created_at,action,subject_id,detail_json) VALUES (?,?,?,?)",
                 (datetime.now(timezone.utc).isoformat(), "campaign.split", campaign_id, json.dumps(detail)))
+            self._assign_group_labels(db)
         return campaign_id, new_campaign_id
 
     def save_analysis(self, edges: Iterable[Any], campaigns: Iterable[Any],
@@ -336,6 +458,40 @@ class Repository:
         db.executemany("INSERT INTO membership VALUES (?,?,?)", members)
         db.executemany("INSERT INTO decisions VALUES (?,?,?,?,?)", decision_rows)
         Repository._restore_manual_overrides(db)
+        Repository._drop_empty_groups(db)
+        Repository._assign_group_labels(db)
+
+    @staticmethod
+    def _drop_empty_groups(db: sqlite3.Connection) -> None:
+        """Remove groups left without enough members after overrides were replayed."""
+        db.execute("UPDATE decisions SET campaign_id=NULL WHERE campaign_id IN ("
+                   "SELECT c.id FROM campaigns c WHERE NOT EXISTS ("
+                   "SELECT 1 FROM membership m WHERE m.campaign_id=c.id))")
+        db.execute("DELETE FROM campaigns WHERE NOT EXISTS ("
+                   "SELECT 1 FROM membership m WHERE m.campaign_id=campaigns.id)")
+        # A network groups several incidents; one left alone is no longer a network.
+        db.execute("DELETE FROM campaigns WHERE level='network' AND ("
+                   "SELECT COUNT(*) FROM membership m WHERE m.campaign_id=campaigns.id) < 2")
+
+    @staticmethod
+    def _assign_group_labels(db: sqlite3.Connection) -> None:
+        """Give every group a number once and keep it, so labels do not shift."""
+        known = {row["group_id"] for row in db.execute("SELECT group_id FROM group_labels")}
+        for level in ("campaign", "network"):
+            current = db.execute("SELECT COALESCE(MAX(number), 0) FROM group_labels WHERE level=?",
+                                 (level,)).fetchone()[0]
+            for row in db.execute("SELECT id FROM campaigns WHERE level=? ORDER BY first_seen, id",
+                                  (level,)).fetchall():
+                if row["id"] in known:
+                    continue
+                current += 1
+                db.execute("INSERT INTO group_labels (group_id, level, number) VALUES (?,?,?)",
+                           (row["id"], level, current))
+
+    def group_labels(self) -> dict[str, tuple[str, int]]:
+        with self._connection() as db:
+            return {row["group_id"]: (row["level"], row["number"])
+                    for row in db.execute("SELECT * FROM group_labels")}
 
     @staticmethod
     def _restore_manual_overrides(db: sqlite3.Connection) -> None:
@@ -378,7 +534,8 @@ class Repository:
                 profile_json = profile["profile_json"] if profile else "{}"
                 db.execute("INSERT OR IGNORE INTO campaigns (id,level,label,profile_json,first_seen,last_seen) "
                     "VALUES (?, 'campaign', ?, ?, NULL, NULL)", (target, target, profile_json))
-                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders})", incident_ids)
+                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders}) "
+                    f"AND {_CAMPAIGN_MEMBERSHIP}", incident_ids)
                 db.executemany("INSERT OR IGNORE INTO membership (campaign_id,incident_id,reason_json) "
                     "VALUES (?,?,'{}')", [(target, identifier) for identifier in incident_ids
                                             if db.execute("SELECT 1 FROM incidents WHERE id=?", (identifier,)).fetchone()])
@@ -404,7 +561,8 @@ class Repository:
                 all_ids = list(dict.fromkeys([*incident_ids, *remaining_ids]))
                 placeholders = ",".join("?" for _ in all_ids)
                 selected_placeholders = ",".join("?" for _ in incident_ids)
-                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders})", all_ids)
+                db.execute(f"DELETE FROM membership WHERE incident_id IN ({placeholders}) "
+                    f"AND {_CAMPAIGN_MEMBERSHIP}", all_ids)
                 db.executemany("INSERT OR IGNORE INTO membership (campaign_id,incident_id,reason_json) "
                     "VALUES (?,?,'{}')", [(target, identifier) for identifier in remaining_ids
                                             if db.execute("SELECT 1 FROM incidents WHERE id=?", (identifier,)).fetchone()])

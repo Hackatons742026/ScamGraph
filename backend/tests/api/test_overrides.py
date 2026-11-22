@@ -8,7 +8,7 @@ from backend.api.main import app
 from backend.db import Repository
 from backend.engine.linking import LinkEdge
 from backend.engine.memory import Campaign
-from backend.pipeline.models import Coverage, Incident
+from backend.pipeline.models import Artifact, Coverage, Evidence, Incident
 
 client = TestClient(app)
 
@@ -19,12 +19,27 @@ def live_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(db_path))
     repo = Repository(db_path)
     incident_ids = ("inc-a", "inc-b", "inc-c", "inc-d")
-    for identifier in incident_ids:
+    # Background incidents keep shared values below the high-document-frequency cut-off.
+    for identifier in (*incident_ids, *(f"inc-bg-{n}" for n in range(4))):
         repo.save_incident(Incident(identifier, "synthetic", coverage=Coverage(kinds_present=["har"])))
+    # Evidence that reproduces the stored links, so re-analysis after a rejection
+    # derives the same edges (a-b tier A, c-d tier B with two families, b-c network).
+    shared = {
+        "inc-a": [("pixel_id", "A", None, "px-ab")],
+        "inc-b": [("pixel_id", "A", None, "px-ab"), ("kit_hash", "B", "kit", "kit-bc")],
+        "inc-c": [("click_domain", "B", "tds", "tds-cd"), ("landing_domain", "B", "domain", "dom-cd"),
+                  ("kit_hash", "B", "kit", "kit-bc")],
+        "inc-d": [("click_domain", "B", "tds", "tds-cd"), ("landing_domain", "B", "domain", "dom-cd")],
+    }
+    for identifier, rows in shared.items():
+        repo.save_artifacts([Artifact(f"art-{identifier}", identifier, "har", "synthetic.har", parse_status="ok")])
+        repo.save_evidence(identifier, [Evidence(kind, tier, family, value, f"{kind}-****", 1.0,
+                                                 f"art-{identifier}", 1) for kind, tier, family, value in rows])
 
     edges = [
         LinkEdge("inc-a", "inc-b", "campaign", "A", (), 1.0, 2, False, ()),
         LinkEdge("inc-c", "inc-d", "campaign", "B", (), 0.8, 2, False, ()),
+        LinkEdge("inc-b", "inc-c", "network", "B", ("kit",), 0.5, 2, False, ()),
     ]
     campaigns = [
         Campaign("camp-a", "campaign", ("inc-a", "inc-b"), (), ()),
@@ -51,8 +66,9 @@ def test_edge_confirm_and_reject_are_persisted_and_rejection_hides_link(live_ove
         "decision": "reject", "note": "synthetic reject note"
     })
     assert rejected.status_code == 200 and rejected.json()["decision"] == "reject"
-    assert [edge["id"] for edge in client.get("/api/graph").json()["edges"]] == ["edge-inc-a-inc-b"]
-    assert client.get("/api/incidents/inc-c").json()["edges"] == []
+    assert [edge["id"] for edge in client.get("/api/graph").json()["edges"]] == [
+        "edge-inc-a-inc-b", "edge-inc-b-inc-c"]
+    assert [edge["id"] for edge in client.get("/api/incidents/inc-c").json()["edges"]] == ["edge-inc-b-inc-c"]
 
     rows = {row["id"]: row for row in live_overrides.list_edges()}
     assert rows["edge-inc-a-inc-b"]["status"] == "confirmed"
@@ -68,7 +84,10 @@ def test_edge_confirm_and_reject_are_persisted_and_rejection_hides_link(live_ove
     }
     assert graph_edge["analyst_override"] == expected_override
     assert client.get("/api/incidents/inc-a").json()["edges"][0]["analyst_override"] == expected_override
-    assert client.get("/api/campaigns/camp-a").json()["edges"][0]["analyst_override"] == expected_override
+    campaign_a = client.get("/api/incidents/inc-a").json()["campaign_id"]
+    assert client.get(f"/api/campaigns/{campaign_a}").json()["edges"][0]["analyst_override"] == expected_override
+    # The rejected link no longer holds inc-c and inc-d together.
+    assert client.get("/api/incidents/inc-c").json()["campaign_id"] is None
     with sqlite3.connect(live_overrides.path) as db:
         audit = db.execute("SELECT action,created_at,detail_json FROM audit_log ORDER BY id").fetchall()
     assert [row[0] for row in audit] == ["edge.confirm", "edge.reject"]
@@ -98,6 +117,7 @@ def test_campaign_merge_and_split_change_persisted_memberships(live_overrides):
     merged = client.post("/api/campaigns/merge", json={"campaign_ids": ["camp-a", "camp-b"], "note": "synthetic merge"})
     assert merged.status_code == 200
     assert merged.json()["id"] == "camp-a"
+    assert merged.json()["membership_source"] == "manual"
     assert {member["id"] for member in merged.json()["members"]} == {"inc-a", "inc-b", "inc-c", "inc-d"}
     assert client.get("/api/campaigns/camp-b").status_code == 404
     assert {row["incident_id"] for row in live_overrides.list_membership() if row["campaign_id"] == "camp-a"} == {
@@ -110,6 +130,7 @@ def test_campaign_merge_and_split_change_persisted_memberships(live_overrides):
     })
     assert split.status_code == 200 and len(split.json()) == 2
     original, separated = split.json()
+    assert original["membership_source"] == separated["membership_source"] == "manual"
     assert original["id"] == "camp-a" and {row["id"] for row in original["members"]} == {"inc-a", "inc-d"}
     assert separated["id"].startswith("campaign-override-")
     assert {row["id"] for row in separated["members"]} == {"inc-b", "inc-c"}
@@ -124,6 +145,7 @@ def test_campaign_merge_and_split_change_persisted_memberships(live_overrides):
         Campaign("camp-a", "campaign", ("inc-a", "inc-b"), (), ()),
         Campaign("camp-b", "campaign", ("inc-c", "inc-d"), (), ()),
     ])
+    assert all(item["membership_source"] == "manual" for item in client.get("/api/campaigns").json())
     rows = {row["id"]: row for row in live_overrides.list_edges()}
     assert rows["edge-inc-c-inc-d"]["status"] == "rejected"
     assert rows["edge-inc-c-inc-d"]["analyst_override"]["note"] == "synthetic reject before merge"

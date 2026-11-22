@@ -145,6 +145,10 @@ class IncidentBundle:
     coverage: Coverage = field(default_factory=Coverage)
     media: list[MediaRef] = field(default_factory=list)
     source_paths: list[str] = field(default_factory=list)
+    # Redacted per-artifact rows persisted for artifact detail / funnel views.
+    requests: list[dict[str, Any]] = field(default_factory=list)
+    redirects: list[dict[str, Any]] = field(default_factory=list)
+    pages: list[dict[str, Any]] = field(default_factory=list)
 
 
 # Funnel step index helpers (role assignment is deferred to in-4).

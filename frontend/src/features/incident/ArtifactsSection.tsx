@@ -77,7 +77,7 @@ export function ArtifactsSection({ artifacts }: { artifacts: ArtifactSummary[] }
     <Card>
       <CardHeader>
         <CardTitle>Artifacts</CardTitle>
-        <p className="text-xs text-slate-500">Select an artifact to load GET /api/artifacts/{"{id}"} detail.</p>
+        <p className="text-xs text-slate-500">Select an artifact to see its pages, redirects, requests and media.</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {failed.length > 0 && (
