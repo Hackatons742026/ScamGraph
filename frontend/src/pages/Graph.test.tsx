@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as client from "@/api/client";
 import { ApiRequestError } from "@/api/client";
 import { edges, graph } from "@/mocks/data";
+import { formatTimestamp } from "@/lib/domain";
 import { renderApp } from "@/test/render";
 
 // jsdom has no canvas: replace Cytoscape with a stub that records elements, tap handlers and its lifecycle.
@@ -13,6 +14,7 @@ const cy = vi.hoisted(() => ({
   created: 0,
   destroyed: 0,
   failNext: false,
+  layoutOptions: {} as Record<string, unknown>,
 }));
 vi.mock("cytoscape", () => {
   const instance = {
@@ -25,7 +27,7 @@ vi.mock("cytoscape", () => {
       }
       cy.lastElements = elements;
     },
-    layout: () => ({ run: () => {} }),
+    layout: (options: Record<string, unknown>) => { cy.layoutOptions = options; return { run: () => {} }; },
     edges: () => ({ unselect: () => {} }),
     getElementById: () => ({ select: () => {} }),
   };
@@ -49,7 +51,7 @@ const legend = () => screen.getByRole("complementary", { name: "Legend" });
 const hrefs = (el: HTMLElement) => within(el).getAllByRole("link").map((a) => a.getAttribute("href"));
 
 beforeEach(() => {
-  Object.assign(cy, { created: 0, destroyed: 0, failNext: false });
+  Object.assign(cy, { created: 0, destroyed: 0, failNext: false, layoutOptions: {} });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -62,6 +64,7 @@ describe("Investigation graph", () => {
     expect(screen.getByRole("complementary", { name: "Legend" })).toHaveTextContent(/Tier A.*Tier B.*Tier C.*Low confidence/s);
     expect(linkRows()).toHaveLength(edges.length);
     expect(cy.lastElements).toHaveLength(graph.nodes.length + edges.length);
+    expect(cy.layoutOptions).toMatchObject({ nodeRepulsion: 14000, idealEdgeLength: 110, nodeDimensionsIncludeLabels: true });
   });
 
   it("opens the evidence panel from the table view, with comparability and low-confidence notes", async () => {
@@ -79,13 +82,30 @@ describe("Investigation graph", () => {
     expect(screen.queryByRole("complementary", { name: "Link evidence" })).not.toBeInTheDocument();
   });
 
-  it("records an analyst confirm from the edge panel", async () => {
+  it("reloads a saved analyst decision and note after closing and reopening Evidence Detail", async () => {
+    const app = renderApp("/graph");
+    await screen.findByRole("table");
+    const openAlphaEvidence = () => screen.getByRole("button", { name: "Evidence for Alpha-1 ↔ Alpha-2" });
+    await userEvent.click(openAlphaEvidence());
+    const panel = screen.getByRole("complementary", { name: "Link evidence" });
+    await userEvent.type(within(panel).getByLabelText(/Note/), "Reviewed shared tier-A pixel");
+    await userEvent.click(within(panel).getByRole("button", { name: "Confirm" }));
+    expect(await within(panel).findByRole("status")).toHaveTextContent(
+      `Confirmed · recorded at ${formatTimestamp("2026-11-21T22:00:00Z")} · Note: Reviewed shared tier-A pixel`,
+    );
+
+    await userEvent.click(within(panel).getByRole("button", { name: "Close link evidence" }));
+    await userEvent.click(openAlphaEvidence());
+    expect(await within(screen.getByRole("complementary", { name: "Link evidence" })).findByRole("status"))
+      .toHaveTextContent(/Reviewed shared tier-A pixel/);
+
+    // A fresh app instance has a new query cache; the mock graph API acts like persisted backend storage.
+    app.unmount();
     renderApp("/graph");
     await screen.findByRole("table");
-    await userEvent.click(within(linkRows()[0]!).getByRole("button"));
-    const panel = screen.getByRole("complementary", { name: "Link evidence" });
-    await userEvent.click(within(panel).getByRole("button", { name: "Confirm" }));
-    expect(await within(panel).findByRole("status")).toHaveTextContent(/Confirmed · recorded at/);
+    await userEvent.click(openAlphaEvidence());
+    expect(await within(screen.getByRole("complementary", { name: "Link evidence" })).findByRole("status"))
+      .toHaveTextContent(`Confirmed · recorded at ${formatTimestamp("2026-11-21T22:00:00Z")} · Note: Reviewed shared tier-A pixel`);
   });
 
   it("explains that a shared site kit alone is a network link, and opens it from a canvas tap", async () => {

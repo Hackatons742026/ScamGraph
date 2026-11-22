@@ -4,16 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as client from "@/api/client";
 import { ApiRequestError } from "@/api/client";
+import type { Edge } from "@/api/types";
 import { EdgeDecisionActions } from "./EdgeDecisionActions";
+import { formatTimestamp } from "@/lib/domain";
 import { MOCK_EDGE_FAIL_ID } from "@/mocks/sentinels";
 import * as overrideApi from "./api";
 
-function renderActions(edgeId = "edge_alpha") {
+function renderActions(edgeId = "edge_alpha", analyst_override: Edge["analyst_override"] = null) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidate = vi.spyOn(qc, "invalidateQueries");
   render(
     <QueryClientProvider client={qc}>
-      <EdgeDecisionActions edgeId={edgeId} />
+      <EdgeDecisionActions edge={{ id: edgeId, analyst_override }} />
     </QueryClientProvider>,
   );
   return { invalidate };
@@ -27,7 +29,7 @@ describe("EdgeDecisionActions", () => {
   it("confirms an edge, shows recorded_at, and refreshes graph/campaigns/incidents", async () => {
     const { invalidate } = renderActions();
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(await screen.findByRole("status")).toHaveTextContent(/Confirmed · recorded at 2026-11-21T22:00:00Z/);
+    expect(await screen.findByRole("status")).toHaveTextContent(`Confirmed · recorded at ${formatTimestamp("2026-11-21T22:00:00Z")}`);
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["graph"] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["campaigns"] });
@@ -40,6 +42,17 @@ describe("EdgeDecisionActions", () => {
     await userEvent.type(screen.getByLabelText(/Note/), "Synthetic reject note");
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
     expect(await screen.findByRole("status")).toHaveTextContent(/Rejected · recorded at/);
+  });
+
+  it("shows the persisted decision, time, and note passed in the edge payload", () => {
+    renderActions("edge_saved", {
+      decision: "confirm",
+      recorded_at: "2026-11-21T22:00:00Z",
+      note: "Reviewed the shared tier-A pixel",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      `Confirmed · recorded at ${formatTimestamp("2026-11-21T22:00:00Z")} · Note: Reviewed the shared tier-A pixel`,
+    );
   });
 
   it("shows inline errors including 501 not_implemented", async () => {

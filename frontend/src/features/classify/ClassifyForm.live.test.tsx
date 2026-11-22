@@ -18,8 +18,8 @@ const realMockFetch = handlers.mockFetch;
 
 const uploaded: IncidentSummary = {
   ...incidents.find((i) => i.status === "new_candidate")!,
-  id: "inc_upload_synthetic",
-  label: "Uploaded material",
+  id: "inc_upload_abcdef",
+  label: "Upload abcdef",
 };
 
 const result: ClassifyResult = {
@@ -109,11 +109,11 @@ describe("ClassifyForm against a live backend", () => {
     expect(status).toHaveTextContent(/Later uploads are compared with it/);
     expect(staleness(queryClient)).toEqual([true, true, true, true]);
     // The shared incident list was re-read: the leave-one-out picker now offers the upload too.
-    expect(within(screen.getByLabelText(/Leave one out/i)).getByRole("option", { name: "Uploaded material" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText(/Leave one out/i)).getByRole("option", { name: "Upload abcdef" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Classification outcome" })).toBeInTheDocument();
 
-    await userEvent.click(within(status).getByRole("link", { name: "Open Uploaded material" }));
-    expect(router.state.location.pathname).toBe("/incidents/inc_upload_synthetic");
+    await userEvent.click(within(status).getByRole("link", { name: "Open Upload abcdef" }));
+    expect(router.state.location.pathname).toBe("/incidents/inc_upload_abcdef");
   });
 
   it("leave-one-out says nothing was saved and refreshes nothing", async () => {

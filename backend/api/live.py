@@ -20,9 +20,11 @@ from backend.engine.memory import classify, cluster_incidents
 from .schemas import *  # noqa: F403
 
 
-def _safe_incident_label(title: str | None, index: int) -> str:
+def _safe_incident_label(title: str | None, index: int, identifier: str | None = None) -> str:
     """Prefer discover folder title; fall back when empty or path-like."""
     text = (title or "").strip()
+    if text.casefold() == "uploaded material" and identifier:
+        return f"Upload {identifier[-6:]}"
     if not text or any(ch in text for ch in "/\\:"):
         return f"Incident {index}"
     return text
@@ -145,7 +147,7 @@ def group_context(repo: Repository) -> dict:
     memberships = repo.list_membership()
     incidents = sorted(repo.list_incidents(), key=lambda item: (item["first_seen"] or "", item["id"]))
     incident_labels = {
-        item["id"]: _safe_incident_label(item.get("title"), index)
+        item["id"]: _safe_incident_label(item.get("title"), index, item["id"])
         for index, item in enumerate(incidents, 1)
     }
     rows_by_id = {item["id"]: item for item in campaigns}
@@ -179,7 +181,8 @@ def group_context(repo: Repository) -> dict:
         "members_by_group": members_by_group,
         "campaign_by_incident": campaign_by_incident,
         "network_by_incident": network_by_incident,
-        "network_by_campaign": network_by_campaign}
+        "network_by_campaign": network_by_campaign,
+        "manual_campaign_ids": repo.manual_campaign_ids()}
 
 
 def incident(repo: Repository, row: dict, groups: dict | None = None) -> IncidentSummary:
@@ -197,23 +200,25 @@ def incident(repo: Repository, row: dict, groups: dict | None = None) -> Inciden
         coverage=coverage(row["coverage_json"]), status=status, campaign_id=campaign_id,
         campaign_label=groups["labels"].get(campaign_id) if campaign_id else None,
         network_id=network_id, outcome=outcome,
-        reason_summary=reasons[0] if reasons else None)
+        reason_summary=reasons[0] if reasons else None,
+        ingested_at=row.get("ingested_at"))
 def evidence(row: dict) -> EvidenceItem:
     return EvidenceItem(id=f"evidence-{row['id']}", type=row["type"], tier=row["tier"],
         family=row["family"], display=row["display_value"], weight=row["weight"],
         artifact_id=row["artifact_id"] or "", funnel_step=row["funnel_step"],
         ignored=bool(row["ignored"]), ignore_reason=row["ignore_reason"])
-def artifact(row: dict) -> ArtifactSummary:
+def artifact(row: dict, *, duplicate_of: str | None = None) -> ArtifactSummary:
     observations = 1
     error = row.get("error") or ""
-    if "observations=" in error:
-        observations = int(error.rsplit("observations=", 1)[1].split(";", 1)[0])
-        error = error.rsplit("observations=", 1)[0].rstrip("; ")
+    match = re.search(r"(?:^|;\s*)observations=(\d+)(?:$|;)", error)
+    if match:
+        observations = int(match.group(1))
+        error = re.sub(r"(?:^|;\s*)observations=\d+(?=$|;)", "", error).strip(" ;")
     return ArtifactSummary(id=row["id"], kind=row["kind"],
         name_display=f"Artifact.{row['kind']}", funnel_step=row["funnel_step"],
         role=row["role"] or "unknown", parse_status=row["parse_status"] or "partial",
         error=safe_artifact_error(row["kind"], row["parse_status"], error),
-        captured_at=row["captured_at"], duplicate_of=None,
+        captured_at=row["captured_at"], duplicate_of=duplicate_of,
         observations=observations)
 
 def safe_artifact_error(kind: str, status: str | None, error: str | None) -> str | None:
@@ -264,7 +269,8 @@ def campaign(repo: Repository, row: dict, groups: dict | None = None) -> Campaig
         level=row["level"], size=len(members), incident_ids=members,
         first_seen=min(seen) if seen else None, last_seen=max(seen) if seen else None,
         strongest_evidence=evidence(strongest) if strongest else None,
-        network_id=groups["network_by_campaign"].get(row["id"]))
+        network_id=groups["network_by_campaign"].get(row["id"]),
+        membership_source="manual" if row["id"] in groups["manual_campaign_ids"] else "automatic")
 def safe_media_path(row: dict) -> Path:
     roots = [Path(value).resolve() for key in ("SCAMGRAPH_DATA_DIR", "SCAMGRAPH_CACHE_DIR")
              if (value := os.environ.get(key))]

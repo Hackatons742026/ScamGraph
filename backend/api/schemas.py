@@ -90,6 +90,7 @@ class IncidentSummary(ContractModel):
     artifact_count: int; coverage: Coverage; status: IncidentStatus
     campaign_id: str | None; campaign_label: str | None; network_id: str | None
     outcome: Outcome | None; reason_summary: str | None = None
+    ingested_at: str | None = None
 
 class IncidentDetail(IncidentSummary):
     artifacts: list[ArtifactSummary]; funnel: list[FunnelStep]
@@ -106,6 +107,7 @@ class CampaignSummary(ContractModel):
     id: str; label: str; level: Level; size: int
     incident_ids: list[str]; first_seen: str | None; last_seen: str | None
     strongest_evidence: EvidenceItem | None; network_id: str | None
+    membership_source: Literal["automatic", "manual"] = "automatic"
 
 class TimelineItem(ContractModel):
     date: str; incident_id: str; event: str

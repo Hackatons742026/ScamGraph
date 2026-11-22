@@ -34,13 +34,24 @@ class Repository:
     def _connection(self) -> sqlite3.Connection:
         return connect(self.path)
 
+    def health_check(self) -> None:
+        """Confirm the initialized SQLite database is readable and consistent."""
+        with self._connection() as db:
+            result = db.execute("PRAGMA quick_check").fetchone()
+        if result is None or result[0] != "ok":
+            raise sqlite3.DatabaseError("SQLite integrity check failed")
+
     def save_incident(self, incident: Incident) -> None:
+        ingested_at = datetime.now(timezone.utc).isoformat()
         values = (
             incident.id, incident.folder, incident.title, _scalar(incident.first_seen),
             _scalar(incident.last_seen), json.dumps(incident.coverage.to_dict()), incident.status,
+            ingested_at,
         )
         with self._connection() as db:
-            db.execute("""INSERT INTO incidents VALUES (?,?,?,?,?,?,?)
+            db.execute("""INSERT INTO incidents
+                (id,folder,title,first_seen,last_seen,coverage_json,status,ingested_at)
+                VALUES (?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET folder=excluded.folder,title=excluded.title,
                 first_seen=excluded.first_seen,last_seen=excluded.last_seen,
                 coverage_json=excluded.coverage_json,status=excluded.status""", values)
@@ -69,6 +80,27 @@ class Repository:
         with self._connection() as db:
             rows = db.execute("SELECT * FROM artifacts WHERE incident_id=? ORDER BY id", (incident_id,))
             return [dict(row) for row in rows]
+
+    def duplicate_artifact_map(self, artifacts: Iterable[dict[str, Any]]) -> dict[str, str]:
+        """Map exact duplicate artifact IDs to the first recorded observation."""
+        hashes = sorted({row["sha256"] for row in artifacts if row.get("sha256")})
+        if not hashes:
+            return {}
+        placeholders = ",".join("?" for _ in hashes)
+        with self._connection() as db:
+            rows = db.execute(
+                f"SELECT id,sha256 FROM artifacts WHERE sha256 IN ({placeholders}) ORDER BY rowid",
+                hashes,
+            ).fetchall()
+        canonical: dict[str, str] = {}
+        duplicates: dict[str, str] = {}
+        for row in rows:
+            digest, artifact_id = row["sha256"], row["id"]
+            if digest in canonical:
+                duplicates[artifact_id] = canonical[digest]
+            else:
+                canonical[digest] = artifact_id
+        return duplicates
 
     def get_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         with self._connection() as db:
@@ -176,13 +208,31 @@ class Repository:
         with self._connection() as db:
             return [dict(row) for row in db.execute("SELECT * FROM membership ORDER BY campaign_id,incident_id")]
 
+    def manual_campaign_ids(self) -> set[str]:
+        """Return extant campaign IDs touched by analyst Merge/Split operations."""
+        with self._connection() as db:
+            campaigns = {row[0] for row in db.execute("SELECT id FROM campaigns WHERE level='campaign'")}
+            rows = db.execute("""SELECT action,subject_id,detail_json FROM audit_log
+                WHERE action IN ('campaign.merge','campaign.split') ORDER BY id""").fetchall()
+        manual: set[str] = set()
+        for row in rows:
+            detail = json.loads(row["detail_json"] or "{}")
+            if row["action"] == "campaign.merge":
+                candidates = [row["subject_id"], *detail.get("campaign_ids", [])]
+            else:
+                candidates = [row["subject_id"], detail.get("new_campaign_id")]
+            manual.update(identifier for identifier in candidates if identifier in campaigns)
+        return manual
+
     def save_uploaded_bundle(self, bundle: IncidentBundle,
                              analysis: Callable[[], tuple[Iterable[Any], Iterable[Any], Iterable[dict[str, Any]]]]) -> None:
         """Serialize analysis and atomically add an upload with its derived state."""
         incident = bundle.incident
+        now = datetime.now(timezone.utc).isoformat()
         incident_values = (
             incident.id, incident.folder, incident.title, _scalar(incident.first_seen),
             _scalar(incident.last_seen), json.dumps(incident.coverage.to_dict()), incident.status,
+            now,
         )
         artifact_rows = [(
             item.id, item.incident_id, _scalar(item.kind), item.path, item.funnel_step,
@@ -201,14 +251,15 @@ class Repository:
             "evidence_count": len(evidence_rows),
             "media_count": len(media_rows),
         })
-        now = datetime.now(timezone.utc).isoformat()
         with self._connection() as db:
             # Acquire the writer lock before reading existing memory so concurrent
             # uploads cannot replace derived state computed from the same snapshot.
             db.execute("PRAGMA busy_timeout = 30000")
             db.execute("BEGIN IMMEDIATE")
             edges, campaigns, decisions = analysis()
-            db.execute("INSERT INTO incidents VALUES (?,?,?,?,?,?,?)", incident_values)
+            db.execute("""INSERT INTO incidents
+                (id,folder,title,first_seen,last_seen,coverage_json,status,ingested_at)
+                VALUES (?,?,?,?,?,?,?,?)""", incident_values)
             db.executemany("""INSERT INTO artifacts
                 (id,incident_id,kind,path,funnel_step,role,sha256,captured_at,parser,parse_status,error)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)""", artifact_rows)

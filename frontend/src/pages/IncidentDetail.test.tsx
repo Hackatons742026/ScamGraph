@@ -49,6 +49,13 @@ describe("Incident detail page", () => {
     expect(screen.getByText(/Hosts:.*news\.example-scam\.test/)).toBeInTheDocument();
   });
 
+  it("shows the existing exact-duplicate indicator from artifact detail", async () => {
+    renderApp("/incidents/inc_alpha_2");
+    await userEvent.click(await screen.findByRole("button", { name: /article\.html/i }));
+    expect(await screen.findByText("art_alpha1_page")).toBeInTheDocument();
+    expect(screen.getByText(/Duplicate of/)).toBeInTheDocument();
+  });
+
   it("shows an artifact's screenshots with OCR text and enlarges one in place", async () => {
     renderApp("/incidents/inc_alpha_1");
     await userEvent.click(await screen.findByRole("button", { name: /ad_screenshot\.png/i }));

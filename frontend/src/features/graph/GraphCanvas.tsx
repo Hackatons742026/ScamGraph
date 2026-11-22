@@ -50,7 +50,7 @@ function CytoscapeView({ graph, selectedEdgeId, onSelectEdge, onOpenIncident }: 
     try {
       instance.add(toElements(graph));
       // fcose randomizes initial positions by default; a fresh instance has none, so never pass randomize: false.
-      instance.layout({ name: "fcose", animate: false, nodeRepulsion: 9000, idealEdgeLength: 90 } as cytoscape.LayoutOptions).run();
+      instance.layout({ name: "fcose", animate: false, nodeRepulsion: 14000, idealEdgeLength: 110, nodeDimensionsIncludeLabels: true } as cytoscape.LayoutOptions).run();
     } catch (err) {
       instance.destroy(); // the renderer is already running: do not leak it, then let CanvasBoundary show the fallback
       throw err;

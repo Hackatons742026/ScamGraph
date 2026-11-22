@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from backend.pipeline.models import ArtifactKind
-from backend.pipeline.run import process_input, run_on_data_dir
+from backend.pipeline.models import Artifact, ArtifactKind, Incident
+from backend.pipeline.run import _parse_incident, process_input, run_on_data_dir
 from backend.tests.fixtures.synthetic_har import write_har
 from backend.tests.fixtures.synthetic_media import write_adlib, write_png
 from backend.tests.fixtures.synthetic_pages import write_saved_page
@@ -54,6 +54,23 @@ def test_process_input_text_url_no_db(tmp_path: Path) -> None:
     }
     assert ArtifactKind.HTML.value in kinds or ArtifactKind.TEXT.value in kinds
     assert bundle.coverage is not None
+
+
+def test_same_batch_image_observation_count_survives_parser(tmp_path: Path) -> None:
+    pytest.importorskip("PIL.Image")
+    first = write_png(tmp_path / "first.png")
+    second = tmp_path / "second.png"
+    second.write_bytes(first.read_bytes())
+    incident = Incident("synthetic-duplicates", str(tmp_path), artifacts=[
+        Artifact("artifact-first", "synthetic-duplicates", ArtifactKind.IMAGE, str(first)),
+        Artifact("artifact-second", "synthetic-duplicates", ArtifactKind.IMAGE, str(second)),
+    ])
+
+    parsed = _parse_incident(incident)
+
+    assert len(parsed["artifacts"]) == 1
+    assert parsed["artifacts"][0].sha256
+    assert parsed["artifacts"][0].error and parsed["artifacts"][0].error.endswith("observations=2")
 
 
 def test_run_continues_after_broken_artifact(tmp_path: Path) -> None:

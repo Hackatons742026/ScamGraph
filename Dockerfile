@@ -23,9 +23,12 @@ RUN apt-get update \
     && tesseract --list-langs 2>&1 | grep -qx pol \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
-    && useradd --system --uid 10001 --create-home scamgraph \
-    && mkdir -p /var/lib/scamgraph/cache \
-    && chown -R scamgraph:scamgraph /var/lib/scamgraph
+    && (getent group 999 >/dev/null || groupadd --system --gid 999 scamgraph) \
+    && useradd --system --uid 10001 --gid 999 --create-home scamgraph \
+    && mkdir -p /var/lib/scamgraph/cache /var/lib/scamgraph-live/cache \
+    && chown -R 10001:999 /var/lib/scamgraph /var/lib/scamgraph-live \
+    && chmod 0750 /var/lib/scamgraph /var/lib/scamgraph/cache \
+        /var/lib/scamgraph-live /var/lib/scamgraph-live/cache
 
 FROM python-deps AS backend-code
 COPY backend/ ./backend/

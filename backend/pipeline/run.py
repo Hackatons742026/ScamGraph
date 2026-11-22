@@ -198,10 +198,7 @@ def run_on_data_dir(
 def _parse_incident(incident: Incident) -> dict:
     deduped = dedupe_artifacts(list(incident.artifacts))
     artifacts = [d.artifact for d in deduped]
-    for rec in deduped:
-        if rec.observations > 1:
-            note = f"observations={rec.observations}"
-            rec.artifact.error = f"{rec.artifact.error}; {note}" if rec.artifact.error else note
+    observations_by_artifact = {rec.artifact.id: rec.observations for rec in deduped}
 
     har_map: dict = {}
     html_map: dict = {}
@@ -274,6 +271,14 @@ def _parse_incident(incident: Incident) -> dict:
             art.parse_status = ParseStatus.FAILED
             art.error = f"{type(exc).__name__}: {exc}"[:200]
             logger.exception("artifact parse failed: %s", art.path)
+
+    # Parsers own `error`; add the observation count only after they have completed.
+    # Keep the legacy persisted marker so older API consumers can read the count.
+    for art in artifacts:
+        observations = observations_by_artifact.get(art.id, 1)
+        if observations > 1:
+            marker = f"observations={observations}"
+            art.error = f"{art.error}; {marker}" if art.error else marker
 
     role_by_id = {
         r.artifact_id: r.role

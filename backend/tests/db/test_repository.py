@@ -15,9 +15,25 @@ def test_schema_is_repeatable_and_has_all_tables(tmp_path):
     with sqlite3.connect(path) as db:
         names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         media_columns = {row[1] for row in db.execute("PRAGMA table_info(media)")}
+        incident_columns = {row[1] for row in db.execute("PRAGMA table_info(incidents)")}
     assert {"runs", "incidents", "artifacts", "pages", "requests", "media", "evidence",
             "edges", "campaigns", "membership", "decisions", "audit_log"} <= names
     assert "path" in media_columns
+    assert "ingested_at" in incident_columns
+
+
+def test_legacy_incident_ingestion_time_stays_unknown(tmp_path):
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as db:
+        db.execute("""CREATE TABLE incidents (
+            id TEXT PRIMARY KEY, folder TEXT NOT NULL, title TEXT, first_seen TEXT,
+            last_seen TEXT, coverage_json TEXT NOT NULL DEFAULT '{}', status TEXT)""")
+        db.execute("INSERT INTO incidents (id,folder,first_seen) VALUES (?,?,?)",
+                   ("legacy", "synthetic", "2026-01-01T00:00:00Z"))
+    init_db(path)
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT first_seen,ingested_at FROM incidents WHERE id='legacy'").fetchone() == (
+            "2026-01-01T00:00:00Z", None)
 
 
 def test_repository_round_trip_pipeline_models(tmp_path):
@@ -37,6 +53,10 @@ def test_repository_round_trip_pipeline_models(tmp_path):
     repo.save_artifacts([artifact])
 
     assert repo.get_incident(incident.id)["folder"] == "synthetic"
+    first_ingested_at = repo.get_incident(incident.id)["ingested_at"]
+    assert first_ingested_at and incident.first_seen is None
+    repo.save_incident(Incident(incident.id, "synthetic-updated"))
+    assert repo.get_incident(incident.id)["ingested_at"] == first_ingested_at
     assert repo.get_artifacts(incident.id)[0]["kind"] == "har"
     assert repo.get_artifacts(incident.id)[0]["role"] == "prelander"
     assert repo.get_evidence(incident.id)[0]["display_value"] == "pixel-****"

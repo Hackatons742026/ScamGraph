@@ -47,6 +47,7 @@ describe("OutcomeCard", () => {
     expect(screen.getByRole("heading", { name: "Classification outcome" })).toBeInTheDocument();
     expect(screen.getByText(OUTCOME[outcome])).toBeInTheDocument();
     expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.getByText("42 ms")).toBeInTheDocument();
 
     if (outcome === "known_campaign") {
       const link = screen.getByRole("link", { name: result.campaign_label! });

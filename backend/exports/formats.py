@@ -108,7 +108,6 @@ def render_misp(data: dict) -> bytes:
         attributes.append({
             "id": "0",
             "event_id": "0",
-            "event_uuid": event_uuid,
             "distribution": "0",
             "timestamp": timestamp,
             "uuid": attr_uuid,
@@ -119,13 +118,12 @@ def render_misp(data: dict) -> bytes:
             "comment": (f"ScamGraph tier {item['tier']}; incident {item['incident_ref']}; "
                         f"artifact {item['artifact_ref'] or 'unknown'}; funnel step {item['funnel_step']}"),
         })
-    payload = {"Event": {
+    event = {
         "id": "0",
         "org_id": "0",
         "orgc_id": "0",
         "uuid": event_uuid,
         "info": f"ScamGraph masked campaign {data['campaign_ref']}",
-        "date": data["date"],
         "threat_level_id": "4",
         "analysis": "0",
         "timestamp": timestamp,
@@ -133,5 +131,9 @@ def render_misp(data: dict) -> bytes:
         "published": False,
         "Orgc": {"id": "0", "name": "ScamGraph", "uuid": org_uuid},
         "Attribute": attributes,
-    }}
+    }
+    # MISP's event date is optional; omit it when no source timestamp exists.
+    if data.get("date"):
+        event["date"] = data["date"]
+    payload = {"Event": event}
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")

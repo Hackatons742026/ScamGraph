@@ -41,11 +41,11 @@ const cov = (kinds: Coverage["artifact_kinds"], badges: string[] = []): Coverage
 const inc = (p: Partial<IncidentSummary> & Pick<IncidentSummary, "id" | "label" | "status">): IncidentSummary => ({
   first_seen: "2026-11-01T10:00:00Z", last_seen: "2026-11-03T18:00:00Z", artifact_count: 3,
   coverage: cov(["har", "html", "image"]), campaign_id: null, campaign_label: null, network_id: null,
-  outcome: null, reason_summary: null, ...p,
+  outcome: null, reason_summary: null, ingested_at: null, ...p,
 });
 
 export const incidents: IncidentSummary[] = [
-  inc({ id: "inc_alpha_1", label: "Synthetic incident Alpha-1", status: "in_campaign", campaign_id: "camp_alpha", campaign_label: "Synthetic Campaign Alpha", network_id: "net_kit", outcome: "known_campaign", reason_summary: "Shares a tier-A ad-tracking pixel with Alpha-2." }),
+  inc({ id: "inc_alpha_1", label: "Synthetic incident Alpha-1", status: "in_campaign", campaign_id: "camp_alpha", campaign_label: "Synthetic Campaign Alpha", network_id: "net_kit", outcome: "known_campaign", reason_summary: "Shares a tier-A ad-tracking pixel with Alpha-2.", ingested_at: "2026-11-04T10:15:00Z" }),
   inc({ id: "inc_alpha_2", label: "Synthetic incident Alpha-2", status: "in_campaign", artifact_count: 4, coverage: cov(["har", "html"]), campaign_id: "camp_alpha", campaign_label: "Synthetic Campaign Alpha", network_id: "net_kit", outcome: "known_campaign", reason_summary: "Shares a tier-A ad-tracking pixel with Alpha-1." }),
   inc({ id: "inc_beta_1", label: "Synthetic incident Beta-1", status: "in_campaign", campaign_id: "camp_beta", campaign_label: "Synthetic Campaign Beta", network_id: "net_kit", outcome: "known_campaign", reason_summary: "Two tier-B families (creative + domain) shared with Beta-2." }),
   inc({ id: "inc_beta_2", label: "Synthetic incident Beta-2", status: "in_campaign", artifact_count: 5, campaign_id: "camp_beta", campaign_label: "Synthetic Campaign Beta", network_id: "net_kit", outcome: "known_campaign", reason_summary: "Two tier-B families (creative + domain) shared with Beta-1." }),
@@ -117,7 +117,7 @@ export function artifactDetail(id: string): ArtifactDetail | undefined {
 
 const camp = (id: string, label: string, ids: string[], strongest: EvidenceItem): CampaignSummary => ({
   id, label, level: "campaign", size: ids.length, incident_ids: ids, first_seen: "2026-11-01T10:00:00Z",
-  last_seen: "2026-11-03T18:00:00Z", strongest_evidence: strongest, network_id: "net_kit",
+  last_seen: "2026-11-03T18:00:00Z", strongest_evidence: strongest, network_id: "net_kit", membership_source: "automatic",
 });
 
 function cloneCampaigns(rows: CampaignSummary[]): CampaignSummary[] {
@@ -174,6 +174,7 @@ export const graph: GraphResponse = {
 /** Restores campaigns / incident membership / graph nodes after mock merge/split mutations. */
 export function resetMutableFixtures() {
   campaigns.splice(0, campaigns.length, ...cloneCampaigns(CAMPAIGNS_SEED));
+  for (const edge of edges) delete edge.analyst_override;
   for (const seed of INCIDENT_CAMPAIGN_SEED) {
     const row = incidents.find((i) => i.id === seed.id);
     if (!row) continue;

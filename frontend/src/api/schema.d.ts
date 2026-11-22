@@ -327,6 +327,18 @@ export interface components {
             /** Loo Routing */
             loo_routing: number;
         };
+        /** AnalystEdgeOverride */
+        AnalystEdgeOverride: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Recorded At */
+            recorded_at: string;
+            /** Note */
+            note?: string | null;
+        };
         /** ArtifactDetail */
         ArtifactDetail: {
             /** Id */
@@ -411,6 +423,12 @@ export interface components {
             strongest_evidence: components["schemas"]["EvidenceItem"] | null;
             /** Network Id */
             network_id: string | null;
+            /**
+             * Membership Source
+             * @default automatic
+             * @enum {string}
+             */
+            membership_source: "automatic" | "manual";
             /** Members */
             members: components["schemas"]["IncidentSummary"][];
             /** Edges */
@@ -446,6 +464,12 @@ export interface components {
             strongest_evidence: components["schemas"]["EvidenceItem"] | null;
             /** Network Id */
             network_id: string | null;
+            /**
+             * Membership Source
+             * @default automatic
+             * @enum {string}
+             */
+            membership_source: "automatic" | "manual";
         };
         /** ClassifyResult */
         ClassifyResult: {
@@ -528,6 +552,7 @@ export interface components {
             low_confidence: boolean;
             /** Evidence */
             evidence: components["schemas"]["EvidenceItem"][];
+            analyst_override?: components["schemas"]["AnalystEdgeOverride"] | null;
         };
         /** EdgeDecisionRequest */
         EdgeDecisionRequest: {
@@ -673,6 +698,8 @@ export interface components {
             outcome: components["schemas"]["Outcome"] | null;
             /** Reason Summary */
             reason_summary?: string | null;
+            /** Ingested At */
+            ingested_at?: string | null;
             /** Artifacts */
             artifacts: components["schemas"]["ArtifactSummary"][];
             /** Funnel */
@@ -711,6 +738,8 @@ export interface components {
             outcome: components["schemas"]["Outcome"] | null;
             /** Reason Summary */
             reason_summary?: string | null;
+            /** Ingested At */
+            ingested_at?: string | null;
         };
         /**
          * Level
@@ -1731,7 +1760,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1791,7 +1820,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1851,7 +1880,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;

@@ -35,6 +35,7 @@ def test_live_repository_endpoints_and_safe_media(tmp_path, monkeypatch):
     assert len(client.get("/api/incidents").json()) == 2
     detail = client.get("/api/incidents/inc-a").json()
     assert detail["evidence"][0]["display"] == "pixel-****" and detail["campaign_id"] == campaign.id
+    assert detail["ingested_at"] and detail["first_seen"] is None
     assert "/private" not in client.get("/api/artifacts/art-inc-a").text
     assert client.get("/api/campaigns/campaign-inc-a").json()["size"] == 2 and len(client.get("/api/graph").json()["edges"]) == 1
     assert client.get("/api/media/media-a").content.startswith(b"\x89PNG")
@@ -61,8 +62,20 @@ def test_live_classify_and_upload_limit(tmp_path, monkeypatch):
     response = client.post("/api/classify", files={"text": (None, "synthetic note")})
     assert response.status_code == 200 and response.json()["outcome"] in {
         "known_campaign", "new_candidate", "needs_review"}
+    assert response.json()["elapsed_ms"] >= 1
     huge = client.post("/api/classify", files={"files": ("safe.txt", b"x" * 10_000_001)})
     assert huge.status_code == 413 and huge.json()["error"] == "http_error"
+
+
+def test_demo_classification_duration_uses_monotonic_measurement(monkeypatch):
+    from backend.api import routes
+
+    monkeypatch.delenv("SCAMGRAPH_DB", raising=False)
+    ticks = iter((10.0, 10.1041))
+    monkeypatch.setattr(routes, "perf_counter", lambda: next(ticks))
+    response = client.post("/api/classify", files={"text": (None, "synthetic note")})
+    assert response.status_code == 200
+    assert response.json()["elapsed_ms"] == 105
 
 def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "quality.db"))
@@ -117,6 +130,7 @@ def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch)
     campaigns = {item["id"]: item for item in client.get("/api/campaigns").json()}
     campaign = campaigns["campaign-x"]
     assert campaign["label"] == "Campaign 1" and campaign["network_id"] == "network-x"
+    assert campaign["membership_source"] == "automatic"
     assert campaign["first_seen"] == dates["inc-b"][0]
     assert campaign["last_seen"] == dates["inc-b"][1]
     assert campaign["strongest_evidence"]["type"] == "pixel_id"
@@ -141,6 +155,21 @@ def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch)
     network_ids = {node["id"] for node in network_graph["nodes"]}
     assert {"inc-a", "inc-b", "inc-c", "campaign-x", "network-x"} <= network_ids
     assert "inc-unassigned" not in network_ids
+
+
+def test_uploaded_incident_labels_are_unique_and_keep_source_times_unknown(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "uploads.db"))
+    repo = Repository(tmp_path / "uploads.db")
+    for identifier in ("upload-abc123", "upload-def456"):
+        repo.save_incident(Incident(identifier, "synthetic", title="Uploaded material"))
+
+    rows = {row["id"]: row for row in client.get("/api/incidents").json()}
+    assert rows["upload-abc123"]["label"] == "Upload abc123"
+    assert rows["upload-def456"]["label"] == "Upload def456"
+    assert rows["upload-abc123"]["first_seen"] is None
+    assert rows["upload-abc123"]["last_seen"] is None
+    assert rows["upload-abc123"]["ingested_at"]
+    assert rows["upload-def456"]["ingested_at"]
 
 def test_campaign_exports_are_masked_downloads(tmp_path, monkeypatch):
     monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "export.db"))
@@ -183,9 +212,11 @@ def test_campaign_exports_are_masked_downloads(tmp_path, monkeypatch):
     assert {row["record_type"] for row in rows} >= {"incident", "artifact", "evidence"}
     event = json.loads(responses["misp"].text)["Event"]
     assert event["info"].startswith("ScamGraph masked campaign campaign-")
-    assert {"Orgc", "date", "analysis", "timestamp", "threat_level_id", "Attribute"} <= set(event)
+    assert {"Orgc", "analysis", "timestamp", "threat_level_id", "Attribute"} <= set(event)
+    assert "date" not in event  # No source timestamp was supplied.
     assert event["Orgc"]["uuid"] and event["Attribute"][0]["uuid"]
     assert event["Attribute"] and event["Attribute"][0]["to_ids"] is False
+    assert "event_uuid" not in event["Attribute"][0]
     assert event["Attribute"][0]["value"].startswith("masked:landing_domain:value-")
     assert client.get("/api/exports/missing.csv").status_code == 404
     assert client.get("/api/exports/network-export-a.csv").status_code == 404
@@ -194,7 +225,7 @@ def test_campaign_exports_are_masked_downloads(tmp_path, monkeypatch):
 def test_csv_export_neutralizes_spreadsheet_formulas():
     data = {
         "campaign_ref": "campaign-safe", "incidents": [{"ref": "incident-safe",
-            "first_seen": "=2+2", "last_seen": ""}],
+            "first_seen": " =2+2", "last_seen": ""}],
         "artifacts": [{"ref": "artifact-safe", "incident_ref": "incident-safe",
             "kind": "@SUM(1,2)", "funnel_step": None}],
         "evidence": [{"incident_ref": "incident-safe", "artifact_ref": "artifact-safe",
@@ -206,11 +237,35 @@ def test_csv_export_neutralizes_spreadsheet_formulas():
     incident = next(row for row in rows if row["record_type"] == "incident")
     artifact = next(row for row in rows if row["record_type"] == "artifact")
     evidence = next(row for row in rows if row["record_type"] == "evidence")
-    assert incident["first_seen"] == "'=2+2"
+    assert incident["first_seen"] == "' =2+2"
     assert artifact["artifact_kind"] == "'@SUM(1,2)"
     assert evidence["evidence_type"] == "'-2+3"
     assert evidence["tier"] == "'\t=4+5"
     assert evidence["family"] == "'+6+7"
+
+
+def test_misp_export_uses_only_source_date_and_omits_unknown_date():
+    from backend.exports.formats import render_misp
+
+    base = {"campaign_ref": "campaign-safe", "generated_at": "2026-11-22T12:00:00+00:00",
+        "date": None, "evidence": [], "incidents": [], "artifacts": [], "edges": []}
+    event = json.loads(render_misp(base))["Event"]
+    assert "date" not in event
+    event = json.loads(render_misp({**base, "date": "2026-01-01"}))["Event"]
+    assert event["date"] == "2026-01-01"
+
+
+def test_misp_event_date_is_derived_from_source_time_in_utc(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCAMGRAPH_DB", str(tmp_path / "misp-date.db"))
+    monkeypatch.setenv("SCAMGRAPH_SALT", "synthetic-misp-date-salt")
+    repo = Repository(tmp_path / "misp-date.db")
+    repo.save_incident(Incident("inc-misp-date", "synthetic",
+        first_seen="2026-01-02T00:30:00+02:00"))
+    repo.save_analysis([], [Campaign("camp-misp-date", "campaign", ("inc-misp-date",), (), ())])
+
+    response = client.get("/api/exports/camp-misp-date.misp.json")
+    assert response.status_code == 200
+    assert json.loads(response.text)["Event"]["date"] == "2026-01-01"
 
 def test_html_export_escapes_projection_values():
     data = {"campaign_ref": "campaign-safe", "generated_at": "<script>alert(1)</script>",

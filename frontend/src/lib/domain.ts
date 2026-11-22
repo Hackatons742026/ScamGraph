@@ -8,6 +8,14 @@ export const humanize = (s: string): string => s.replace(/_/g, " ");
 /** Deterministic date for tables (no locale/timezone drift): YYYY-MM-DD or an em dash. */
 export const formatDate = (iso: string | null): string => (iso ? iso.slice(0, 10) : "—");
 
+/** Format an RFC 3339 timestamp in the viewer's browser locale and timezone. */
+export function formatTimestamp(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
 export const TIER: Record<Tier, { label: string; hint: string; color: string }> = {
   A: { label: "Tier A", hint: "Unique identifier: links incidents on its own", color: "#b91c1c" },
   B: { label: "Tier B", hint: "Shared infrastructure or kit: needs two families for a campaign link", color: "#1d4ed8" },
