@@ -31,12 +31,18 @@ but do not require a source dataset directory. Without
 `POST /api/classify` accepts multipart fields `files`, `text`, `url`, and
 `exclude_incident`. The whole request limit is 10 MB and each uploaded file is
 limited to 5 MB. Filenames are reduced to basenames. Public projections mask
-display values and omit evidence hashes, source paths, and OCR text. Errors use
+display values and omit evidence hashes and source paths. OCR text is returned
+only with artifact-detail media when available. Errors use
 `{ "error": "…", "detail": "…" }`. Override routes require a configured live
 database. They persist changes and audit records; rejecting an edge removes it
 from graph and incident projections. In synthetic mode they return HTTP 501.
 Campaign merge/split accepts an optional note; notes are capped at 500
 characters and stored only in the local audit log.
+
+`GET /api/artifacts/{artifact_id}` returns available OCR text on each media
+reference. Image parse errors use safe, actionable summaries; filesystem paths
+and exception details are never returned. OCR is optional, so a valid image can
+remain available with `parse_status: "partial"` when text extraction is unavailable.
 
 In live mode, a normal classify request is stored as a new incident with its
 parsed artifacts, evidence, and media in the app-managed cache and database.
