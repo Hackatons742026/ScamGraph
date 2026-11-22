@@ -174,6 +174,7 @@ export const graph: GraphResponse = {
 /** Restores campaigns / incident membership / graph nodes after mock merge/split mutations. */
 export function resetMutableFixtures() {
   campaigns.splice(0, campaigns.length, ...cloneCampaigns(CAMPAIGNS_SEED));
+  for (const edge of edges) delete edge.analyst_override;
   for (const seed of INCIDENT_CAMPAIGN_SEED) {
     const row = incidents.find((i) => i.id === seed.id);
     if (!row) continue;

@@ -327,6 +327,18 @@ export interface components {
             /** Loo Routing */
             loo_routing: number;
         };
+        /** AnalystEdgeOverride */
+        AnalystEdgeOverride: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Recorded At */
+            recorded_at: string;
+            /** Note */
+            note?: string | null;
+        };
         /** ArtifactDetail */
         ArtifactDetail: {
             /** Id */
@@ -528,6 +540,7 @@ export interface components {
             low_confidence: boolean;
             /** Evidence */
             evidence: components["schemas"]["EvidenceItem"][];
+            analyst_override?: components["schemas"]["AnalystEdgeOverride"] | null;
         };
         /** EdgeDecisionRequest */
         EdgeDecisionRequest: {
@@ -968,7 +981,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1024,7 +1037,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1082,7 +1095,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1141,7 +1154,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1199,7 +1212,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1257,7 +1270,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1316,7 +1329,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1372,7 +1385,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1430,7 +1443,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1488,7 +1501,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1548,7 +1561,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1613,7 +1626,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1669,7 +1682,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1909,7 +1922,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Implemented */
+            /** @description Successful Response */
             501: {
                 headers: {
                     [name: string]: unknown;

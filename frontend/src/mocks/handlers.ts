@@ -146,6 +146,14 @@ async function mockEdgeDecision(edgeId: string, req: Request) {
   if (body.decision !== "confirm" && body.decision !== "reject") {
     throw new HttpError(422, "validation_error", "decision must be confirm or reject.");
   }
+  const edge = db.edges.find((item) => item.id === edgeId);
+  if (edge) {
+    edge.analyst_override = {
+      decision: body.decision,
+      recorded_at: RECORDED_AT,
+      note: body.note?.trim() || null,
+    };
+  }
   return { edge_id: edgeId, decision: body.decision, recorded_at: RECORDED_AT };
 }
 

@@ -1,31 +1,38 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useId, useState } from "react";
-import type { EdgeDecisionResponse } from "@/api/types";
+import type { Edge } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { invalidateAfterOverride, postEdgeDecision } from "./api";
 import { describeOverrideError } from "./errors";
 
-type Props = { edgeId: string };
+type Props = { edge: Pick<Edge, "id" | "analyst_override"> };
 
-/** Confirm / reject a graph edge; shows recorded_at on success and inline errors (incl. 501). */
-export function EdgeDecisionActions({ edgeId }: Props) {
+/** Confirm / reject a graph edge; shows the latest persisted decision and inline errors (incl. 501). */
+export function EdgeDecisionActions({ edge }: Props) {
   const noteId = useId();
   const client = useQueryClient();
   const [note, setNote] = useState("");
-  const [recorded, setRecorded] = useState<EdgeDecisionResponse | null>(null);
+  const [recorded, setRecorded] = useState<{
+    edgeId: string;
+    value: NonNullable<Edge["analyst_override"]>;
+  } | null>(null);
 
   const mutation = useMutation({
     mutationFn: (decision: "confirm" | "reject") =>
-      postEdgeDecision(edgeId, { decision, note: note.trim() || undefined }),
+      postEdgeDecision(edge.id, { decision, note: note.trim() || undefined }),
     onSuccess: (data) => {
-      setRecorded(data);
+      setRecorded({
+        edgeId: edge.id,
+        value: { decision: data.decision, recorded_at: data.recorded_at, note: note.trim() || null },
+      });
       invalidateAfterOverride(client);
     },
   });
 
   const busy = mutation.isPending;
   const error = mutation.isError ? describeOverrideError(mutation.error) : null;
+  const latest = edge.analyst_override ?? (recorded?.edgeId === edge.id ? recorded.value : null);
 
   return (
     <section aria-label="Analyst edge decision" className="flex flex-col gap-2 border-t border-slate-100 pt-3">
@@ -71,9 +78,10 @@ export function EdgeDecisionActions({ edgeId }: Props) {
           Reject
         </Button>
       </div>
-      {recorded && (
+      {latest && (
         <p role="status" className="text-xs text-slate-600">
-          {recorded.decision === "confirm" ? "Confirmed" : "Rejected"} · recorded at {recorded.recorded_at}
+          {latest.decision === "confirm" ? "Confirmed" : "Rejected"} · recorded at {latest.recorded_at}
+          {latest.note ? ` · Note: ${latest.note}` : ""}
         </p>
       )}
       {error && (

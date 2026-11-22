@@ -2066,6 +2066,16 @@
             },
             "type": "array",
             "title": "Evidence"
+          },
+          "analyst_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalystEdgeOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -3349,6 +3359,40 @@
           "event"
         ],
         "title": "TimelineItem"
+      },
+      "AnalystEdgeOverride": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "recorded_at": {
+            "type": "string",
+            "title": "Recorded At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "recorded_at"
+        ],
+        "title": "AnalystEdgeOverride"
       }
     }
   }

@@ -79,13 +79,30 @@ describe("Investigation graph", () => {
     expect(screen.queryByRole("complementary", { name: "Link evidence" })).not.toBeInTheDocument();
   });
 
-  it("records an analyst confirm from the edge panel", async () => {
+  it("reloads a saved analyst decision and note after closing and reopening Evidence Detail", async () => {
+    const app = renderApp("/graph");
+    await screen.findByRole("table");
+    const openAlphaEvidence = () => screen.getByRole("button", { name: "Evidence for Alpha-1 ↔ Alpha-2" });
+    await userEvent.click(openAlphaEvidence());
+    const panel = screen.getByRole("complementary", { name: "Link evidence" });
+    await userEvent.type(within(panel).getByLabelText(/Note/), "Reviewed shared tier-A pixel");
+    await userEvent.click(within(panel).getByRole("button", { name: "Confirm" }));
+    expect(await within(panel).findByRole("status")).toHaveTextContent(
+      "Confirmed · recorded at 2026-11-21T22:00:00Z · Note: Reviewed shared tier-A pixel",
+    );
+
+    await userEvent.click(within(panel).getByRole("button", { name: "Close link evidence" }));
+    await userEvent.click(openAlphaEvidence());
+    expect(await within(screen.getByRole("complementary", { name: "Link evidence" })).findByRole("status"))
+      .toHaveTextContent(/Reviewed shared tier-A pixel/);
+
+    // A fresh app instance has a new query cache; the mock graph API acts like persisted backend storage.
+    app.unmount();
     renderApp("/graph");
     await screen.findByRole("table");
-    await userEvent.click(within(linkRows()[0]!).getByRole("button"));
-    const panel = screen.getByRole("complementary", { name: "Link evidence" });
-    await userEvent.click(within(panel).getByRole("button", { name: "Confirm" }));
-    expect(await within(panel).findByRole("status")).toHaveTextContent(/Confirmed · recorded at/);
+    await userEvent.click(openAlphaEvidence());
+    expect(await within(screen.getByRole("complementary", { name: "Link evidence" })).findByRole("status"))
+      .toHaveTextContent("Confirmed · recorded at 2026-11-21T22:00:00Z · Note: Reviewed shared tier-A pixel");
   });
 
   it("explains that a shared site kit alone is a network link, and opens it from a canvas tap", async () => {
