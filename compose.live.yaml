@@ -1,0 +1,35 @@
+name: ${SCAMGRAPH_LIVE_PROJECT_NAME:?Set a unique, stable project name for this dataset}
+
+services:
+  app:
+    build:
+      context: .
+      target: app
+    environment:
+      SCAMGRAPH_DB: /var/lib/scamgraph-live/scamgraph.db
+      SCAMGRAPH_DATA_DIR: /data
+      SCAMGRAPH_SALT: ${SCAMGRAPH_SALT:?Set a stable private SCAMGRAPH_SALT before starting live mode}
+      SCAMGRAPH_CACHE_DIR: /var/lib/scamgraph-live/cache
+    ports:
+      - "127.0.0.1:${SCAMGRAPH_LIVE_PORT:-8001}:8000"
+    volumes:
+      - scamgraph-live-state:/var/lib/scamgraph-live
+      - type: bind
+        source: ${SCAMGRAPH_DATA_HOST_PATH:?Set SCAMGRAPH_DATA_HOST_PATH to the dataset folder}
+        target: /data
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+
+volumes:
+  scamgraph-live-state:
