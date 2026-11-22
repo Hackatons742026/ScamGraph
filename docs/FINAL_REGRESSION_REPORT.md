@@ -1,7 +1,7 @@
 # ScamGraph DNA v2.4 — Final Docker Regression Report
 
-**Run date:** 2026-11-22  
-**Branch:** `room/48-docker-reliability-final`  
+**Run date:** 2026-11-22
+**Branch:** `room/48-docker-reliability-final`
 **Test project:** `sg-final-regression-20261122-r1` (synthetic data only)
 
 ## Results
