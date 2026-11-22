@@ -61,11 +61,11 @@ export function toElements(graph: GraphResponse): ElementDefinition[] {
 }
 
 export const stylesheet: StylesheetJson = [
-  { selector: "node", style: { label: "data(label)", "font-size": 10, color: "#334155", "text-valign": "bottom", "text-margin-y": 4 } },
+  { selector: "node", style: { label: "data(label)", "font-size": 10, color: "#334155", "text-valign": "bottom", "text-halign": "center", "text-wrap": "wrap", "text-max-width": "92px", "text-margin-y": 4 } },
   { selector: "node.incident", style: { width: 22, height: 22, "background-color": "#475569", "border-width": 2, "border-color": "#ffffff" } },
   { selector: "node.incident.low-coverage", style: { "border-style": "dashed", "border-color": "#94a3b8", "background-color": "#94a3b8" } },
   { selector: "node.incident.needs-review", style: { "border-color": "#d97706", "border-width": 3 } },
-  { selector: ":parent", style: { "text-valign": "top", "font-weight": "bold", "padding": "16px", "background-opacity": 0.06, "border-width": 1 } },
+  { selector: ":parent", style: { "text-valign": "top", "text-halign": "left", "text-wrap": "wrap", "text-max-width": "140px", "text-margin-x": 8, "text-margin-y": 8, "font-weight": "bold", "padding": "22px", "background-opacity": 0.06, "border-width": 1 } },
   { selector: "node.campaign", style: { "background-color": TIER.A.color, "border-color": TIER.A.color, shape: "round-rectangle" } },
   { selector: "node.network", style: { "background-color": "#1d4ed8", "border-color": "#1d4ed8", "border-style": "dashed", shape: "round-rectangle" } },
   { selector: "node.unassigned", style: { "background-color": "#64748b", "border-color": "#94a3b8", "border-style": "dotted", shape: "round-rectangle" } },

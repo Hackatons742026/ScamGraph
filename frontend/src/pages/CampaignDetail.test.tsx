@@ -1,9 +1,10 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { campaignDetail, incidents } from "@/mocks/data";
+import { campaignDetail, campaigns, incidents } from "@/mocks/data";
 import * as handlers from "@/mocks/handlers";
 import { renderApp } from "@/test/render";
+import { formatTimestamp } from "@/lib/domain";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -19,7 +20,8 @@ describe("Campaign detail page", () => {
     expect(await screen.findByRole("heading", { level: 1, name: alpha.label })).toBeInTheDocument();
     const summary = screen.getByRole("heading", { level: 3, name: alpha.label }).closest(".rounded-lg") as HTMLElement;
     expect(within(summary).getByText("campaign")).toBeInTheDocument();
-    expect(summary).toHaveTextContent(`${alpha.size} incidents · first seen 2026-11-01 · last seen 2026-11-03`);
+    expect(summary).toHaveTextContent(`${alpha.size} incidents · source first seen ${formatTimestamp(alpha.first_seen)} · source last seen ${formatTimestamp(alpha.last_seen)}`);
+    expect(within(summary).getByText("Automatic links")).toBeInTheDocument();
     expect(within(summary).getByText(alpha.strongest_evidence!.display)).toBeInTheDocument();
     expect(within(summary).getByRole("link", { name: /Open in graph/ })).toHaveAttribute("href", "/graph?campaign=camp_alpha");
     expect(await within(summary).findByRole("link", { name: "Synthetic shared-kit network" })).toHaveAttribute("href", "/campaigns/net_kit");
@@ -33,9 +35,15 @@ describe("Campaign detail page", () => {
     await screen.findByRole("heading", { level: 1, name: alpha.label });
 
     const members = card("Members");
+    expect(within(members).getByRole("columnheader", { name: "Source last seen" })).toBeInTheDocument();
+    expect(within(members).getByRole("columnheader", { name: "Ingested" })).toBeInTheDocument();
     for (const m of alpha.members) {
       expect(within(members).getByRole("link", { name: m.label })).toHaveAttribute("href", `/incidents/${m.id}`);
     }
+    const uploadedMember = alpha.members.find((member) => member.ingested_at)!;
+    const uploadedRow = within(members).getByRole("link", { name: uploadedMember.label }).closest("tr") as HTMLElement;
+    expect(within(uploadedRow).getByText(formatTimestamp(uploadedMember.last_seen))).toBeInTheDocument();
+    expect(within(uploadedRow).getByText(formatTimestamp(uploadedMember.ingested_at))).toBeInTheDocument();
     const timeline = card("Timeline");
     expect(within(timeline).getAllByText("first seen")).toHaveLength(alpha.timeline.length);
     expect(within(timeline).getByText("2026-11-01")).toBeInTheDocument();
@@ -70,6 +78,19 @@ describe("Campaign detail page", () => {
 
     await userEvent.click(within(panel).getByRole("button", { name: "Close link evidence" }));
     expect(within(links).queryByRole("complementary", { name: "Link evidence" })).not.toBeInTheDocument();
+  });
+
+  it("labels analyst-merged campaign membership as manual", async () => {
+    const campaign = campaigns.find((item) => item.id === "camp_alpha")!;
+    const previousSource = campaign.membership_source;
+    campaign.membership_source = "manual";
+    try {
+      renderApp("/campaigns/camp_alpha");
+      const summary = await screen.findByRole("heading", { level: 3, name: campaign.label });
+      expect(summary.closest(".rounded-lg")).toHaveTextContent("Manual analyst group");
+    } finally {
+      campaign.membership_source = previousSource;
+    }
   });
 
   it("shows related groups from GET /api/campaigns/{id}/links", async () => {

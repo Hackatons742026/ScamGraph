@@ -33,6 +33,7 @@ function toSummary(detail: CampaignDetail): CampaignSummary {
     last_seen: detail.last_seen,
     strongest_evidence: detail.strongest_evidence,
     network_id: detail.network_id,
+    membership_source: detail.membership_source,
   };
 }
 
@@ -78,6 +79,7 @@ function mockMerge(body: MergeRequest): CampaignDetail {
     label: `Merged (${parts.map((p) => p.label).join(" + ")})`,
     size: incidentIds.length,
     incident_ids: incidentIds,
+    membership_source: "manual",
     members: db.incidents.filter((i) => incidentIds.includes(i.id)),
     edges: db.edges.filter((e) => incidentIds.includes(e.source) && incidentIds.includes(e.target)),
     timeline: incidentIds.map((iid, n) => ({ date: `2026-11-0${(n % 9) + 1}T10:00:00Z`, incident_id: iid, event: "merged" })),
@@ -109,6 +111,7 @@ function mockSplit(body: SplitRequest): CampaignDetail[] {
   const movedIds = detail.incident_ids.filter((id) => move.has(id));
   const remaining: CampaignDetail = {
     ...detail,
+    membership_source: "manual",
     size: remainingIds.length,
     incident_ids: remainingIds,
     members: detail.members.filter((m) => remainingIds.includes(m.id)),
@@ -117,6 +120,7 @@ function mockSplit(body: SplitRequest): CampaignDetail[] {
   };
   const created: CampaignDetail = {
     ...detail,
+    membership_source: "manual",
     id: "camp_split_synthetic",
     label: `${detail.label} (split)`,
     size: movedIds.length,

@@ -1652,6 +1652,15 @@
             ],
             "title": "Network Id"
           },
+          "membership_source": {
+            "type": "string",
+            "enum": [
+              "automatic",
+              "manual"
+            ],
+            "title": "Membership Source",
+            "default": "automatic"
+          },
           "members": {
             "items": {
               "$ref": "#/components/schemas/IncidentSummary"
@@ -1789,6 +1798,15 @@
               }
             ],
             "title": "Network Id"
+          },
+          "membership_source": {
+            "type": "string",
+            "enum": [
+              "automatic",
+              "manual"
+            ],
+            "title": "Membership Source",
+            "default": "automatic"
           }
         },
         "additionalProperties": false,
@@ -2760,6 +2778,17 @@
               }
             ],
             "title": "Reason Summary"
+          },
+          "ingested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingested At"
           }
         },
         "additionalProperties": false,

@@ -327,18 +327,6 @@ export interface components {
             /** Loo Routing */
             loo_routing: number;
         };
-        /** AnalystEdgeOverride */
-        AnalystEdgeOverride: {
-            /**
-             * Decision
-             * @enum {string}
-             */
-            decision: "confirm" | "reject";
-            /** Recorded At */
-            recorded_at: string;
-            /** Note */
-            note?: string | null;
-        };
         /** ArtifactDetail */
         ArtifactDetail: {
             /** Id */
@@ -423,6 +411,12 @@ export interface components {
             strongest_evidence: components["schemas"]["EvidenceItem"] | null;
             /** Network Id */
             network_id: string | null;
+            /**
+             * Membership Source
+             * @default automatic
+             * @enum {string}
+             */
+            membership_source: "automatic" | "manual";
             /** Members */
             members: components["schemas"]["IncidentSummary"][];
             /** Edges */
@@ -458,6 +452,12 @@ export interface components {
             strongest_evidence: components["schemas"]["EvidenceItem"] | null;
             /** Network Id */
             network_id: string | null;
+            /**
+             * Membership Source
+             * @default automatic
+             * @enum {string}
+             */
+            membership_source: "automatic" | "manual";
         };
         /** ClassifyResult */
         ClassifyResult: {
@@ -724,6 +724,8 @@ export interface components {
             outcome: components["schemas"]["Outcome"] | null;
             /** Reason Summary */
             reason_summary?: string | null;
+            /** Ingested At */
+            ingested_at?: string | null;
         };
         /**
          * Level
@@ -923,6 +925,18 @@ export interface components {
             /** Event */
             event: string;
         };
+        /** AnalystEdgeOverride */
+        AnalystEdgeOverride: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Recorded At */
+            recorded_at: string;
+            /** Note */
+            note?: string | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -981,7 +995,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1037,7 +1051,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1095,7 +1109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1154,7 +1168,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1212,7 +1226,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1270,7 +1284,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1329,7 +1343,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1385,7 +1399,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1443,7 +1457,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1501,7 +1515,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1561,7 +1575,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1626,7 +1640,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1682,7 +1696,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1922,7 +1936,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;

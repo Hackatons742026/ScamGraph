@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useId, useState } from "react";
 import type { Edge } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { formatTimestamp } from "@/lib/domain";
 import { invalidateAfterOverride, postEdgeDecision } from "./api";
 import { describeOverrideError } from "./errors";
 
@@ -80,7 +81,7 @@ export function EdgeDecisionActions({ edge }: Props) {
       </div>
       {latest && (
         <p role="status" className="text-xs text-slate-600">
-          {latest.decision === "confirm" ? "Confirmed" : "Rejected"} · recorded at {latest.recorded_at}
+          {latest.decision === "confirm" ? "Confirmed" : "Rejected"} · recorded at {formatTimestamp(latest.recorded_at)}
           {latest.note ? ` · Note: ${latest.note}` : ""}
         </p>
       )}

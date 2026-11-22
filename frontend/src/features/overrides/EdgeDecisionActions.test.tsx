@@ -6,6 +6,7 @@ import * as client from "@/api/client";
 import { ApiRequestError } from "@/api/client";
 import type { Edge } from "@/api/types";
 import { EdgeDecisionActions } from "./EdgeDecisionActions";
+import { formatTimestamp } from "@/lib/domain";
 import { MOCK_EDGE_FAIL_ID } from "@/mocks/sentinels";
 import * as overrideApi from "./api";
 
@@ -28,7 +29,7 @@ describe("EdgeDecisionActions", () => {
   it("confirms an edge, shows recorded_at, and refreshes graph/campaigns/incidents", async () => {
     const { invalidate } = renderActions();
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(await screen.findByRole("status")).toHaveTextContent(/Confirmed · recorded at 2026-11-21T22:00:00Z/);
+    expect(await screen.findByRole("status")).toHaveTextContent(`Confirmed · recorded at ${formatTimestamp("2026-11-21T22:00:00Z")}`);
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["graph"] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["campaigns"] });
@@ -50,7 +51,7 @@ describe("EdgeDecisionActions", () => {
       note: "Reviewed the shared tier-A pixel",
     });
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Confirmed · recorded at 2026-11-21T22:00:00Z · Note: Reviewed the shared tier-A pixel",
+      `Confirmed · recorded at ${formatTimestamp("2026-11-21T22:00:00Z")} · Note: Reviewed the shared tier-A pixel`,
     );
   });
 
