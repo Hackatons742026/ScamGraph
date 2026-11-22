@@ -64,3 +64,12 @@ def test_run_continues_after_broken_artifact(tmp_path: Path) -> None:
     write_adlib(root / "ad.info.json")
     summary = run_on_data_dir(tmp_path / "raw", db_path=tmp_path / "t.db", persist=True)
     assert summary["ok"] == 1
+
+
+def test_run_summary_counts_secrets_redacted_from_har(tmp_path: Path) -> None:
+    root = tmp_path / "raw" / "har-case"
+    root.mkdir(parents=True)
+    write_har(root / "traffic.har")
+    summary = run_on_data_dir(tmp_path / "raw", db_path=tmp_path / "t.db", persist=True)
+    assert summary["ok"] == 1
+    assert summary["secrets_redacted"] > 0

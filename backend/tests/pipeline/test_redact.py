@@ -8,6 +8,7 @@ import pytest
 
 from backend.pipeline.redact import (
     MissingSaltError,
+    counting_redactions,
     hash_secret,
     redact_headers,
     redact_url,
@@ -57,3 +58,17 @@ def test_redact_headers_cookie_and_authorization() -> None:
     assert by_name["authorization"] == hash_secret("Bearer SYNTHBEARER01")
     assert by_name["x-trace"] == "ok"
     assert os.environ["SCAMGRAPH_SALT"] == "unit-test-salt"
+
+
+def test_counting_redactions_tracks_url_and_header_secrets() -> None:
+    with counting_redactions() as box:
+        redact_url("https://land.example-scam.test/x?fbclid=SYNTHFB01&keep=1&token=SYNTHTOKEN01")
+        redact_headers(
+            [
+                ("Cookie", "sid=SYNTHCOOKIE01"),
+                ("X-Trace", "ok"),
+                ("Authorization", "Bearer SYNTHBEARER01"),
+            ]
+        )
+    # fbclid + token + Cookie + Authorization
+    assert box[0] == 4

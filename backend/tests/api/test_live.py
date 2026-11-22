@@ -76,7 +76,13 @@ def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch)
     for identifier, (first_seen, last_seen) in dates.items():
         coverage = Coverage(kinds_present=["video"], kinds_missing=["har", "html"],
                             notes=["no HAR", "video only", "evidence_types=1"])
-        repo.save_incident(Incident(identifier, "PRIVATE_FOLDER", title="PRIVATE_TITLE",
+        folder_title = {
+            "inc-a": "Folder Alpha",
+            "inc-b": "Folder Beta",
+            "inc-c": "Folder Gamma",
+            "inc-unassigned": "Folder Delta",
+        }[identifier]
+        repo.save_incident(Incident(identifier, "PRIVATE_FOLDER", title=folder_title,
             first_seen=first_seen, last_seen=last_seen, coverage=coverage))
     for identifier in ("inc-a", "inc-b"):
         artifact = Artifact(f"art-{identifier}", identifier, "har", "private/path.har",
@@ -97,9 +103,11 @@ def test_live_campaign_graph_and_coverage_are_ui_friendly(tmp_path, monkeypatch)
     ])
 
     incidents = {item["id"]: item for item in client.get("/api/incidents").json()}
-    assert incidents["inc-a"]["label"].startswith("Incident ")
+    assert incidents["inc-a"]["label"] == "Folder Alpha"
+    assert incidents["inc-b"]["label"] == "Folder Beta"
     assert len({item["label"] for item in incidents.values()}) == len(incidents)
     assert "PRIVATE" not in incidents["inc-a"]["label"]
+    assert "private/path" not in json.dumps(incidents["inc-a"])
     assert incidents["inc-a"]["campaign_label"] == "Campaign 1"
     assert incidents["inc-a"]["network_id"] == "network-x"
     assert incidents["inc-c"]["campaign_id"] is None

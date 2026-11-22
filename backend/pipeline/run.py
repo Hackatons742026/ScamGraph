@@ -38,7 +38,7 @@ from backend.pipeline.models import (
     MediaRef,
     ParseStatus,
 )
-from backend.pipeline.redact import require_salt
+from backend.pipeline.redact import counting_redactions, require_salt
 from backend.pipeline.video import extract_keyframes
 
 logger = logging.getLogger(__name__)
@@ -145,30 +145,33 @@ def run_on_data_dir(
     incidents = discover_incidents(root)
     summaries: list[dict] = []
     errors: list[str] = []
+    secrets_redacted = 0
 
-    for incident in incidents:
-        try:
-            parsed = _parse_incident(incident)
-            if repo is not None:
-                inc = parsed["incident"]
-                repo.save_incident(inc)
-                repo.save_artifacts(parsed["artifacts"])
-                repo.save_evidence(inc.id, parsed["evidence"])
-                if parsed["media"]:
-                    repo.save_media(parsed["media"])
-            summaries.append(
-                {
-                    "incident_id": incident.id,
-                    "artifacts": len(parsed["artifacts"]),
-                    "evidence": len(parsed["evidence"]),
-                    "media": len(parsed["media"]),
-                }
-            )
-        except Exception as exc:  # noqa: BLE001 — isolation boundary
-            msg = f"{incident.id}: {type(exc).__name__}: {exc}"
-            logger.exception("incident failed: %s", incident.id)
-            errors.append(msg[:300])
+    with counting_redactions() as redact_box:
+        for incident in incidents:
+            try:
+                parsed = _parse_incident(incident)
+                if repo is not None:
+                    inc = parsed["incident"]
+                    repo.save_incident(inc)
+                    repo.save_artifacts(parsed["artifacts"])
+                    repo.save_evidence(inc.id, parsed["evidence"])
+                    if parsed["media"]:
+                        repo.save_media(parsed["media"])
+                summaries.append(
+                    {
+                        "incident_id": incident.id,
+                        "artifacts": len(parsed["artifacts"]),
+                        "evidence": len(parsed["evidence"]),
+                        "media": len(parsed["media"]),
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001 — isolation boundary
+                msg = f"{incident.id}: {type(exc).__name__}: {exc}"
+                logger.exception("incident failed: %s", incident.id)
+                errors.append(msg[:300])
 
+    secrets_redacted = redact_box[0]
     elapsed = time.perf_counter() - t0
     finished = datetime.now(timezone.utc)
     summary = {
@@ -178,6 +181,7 @@ def run_on_data_dir(
         "elapsed_s": round(elapsed, 3),
         "details": summaries,
         "run_id": run_id,
+        "secrets_redacted": secrets_redacted,
     }
     if repo is not None:
         repo.save_run(
