@@ -327,6 +327,18 @@ export interface components {
             /** Loo Routing */
             loo_routing: number;
         };
+        /** AnalystEdgeOverride */
+        AnalystEdgeOverride: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Recorded At */
+            recorded_at: string;
+            /** Note */
+            note?: string | null;
+        };
         /** ArtifactDetail */
         ArtifactDetail: {
             /** Id */
@@ -686,6 +698,8 @@ export interface components {
             outcome: components["schemas"]["Outcome"] | null;
             /** Reason Summary */
             reason_summary?: string | null;
+            /** Ingested At */
+            ingested_at?: string | null;
             /** Artifacts */
             artifacts: components["schemas"]["ArtifactSummary"][];
             /** Funnel */
@@ -924,18 +938,6 @@ export interface components {
             incident_id: string;
             /** Event */
             event: string;
-        };
-        /** AnalystEdgeOverride */
-        AnalystEdgeOverride: {
-            /**
-             * Decision
-             * @enum {string}
-             */
-            decision: "confirm" | "reject";
-            /** Recorded At */
-            recorded_at: string;
-            /** Note */
-            note?: string | null;
         };
     };
     responses: never;
@@ -1758,7 +1760,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1818,7 +1820,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -1878,7 +1880,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Not Implemented */
             501: {
                 headers: {
                     [name: string]: unknown;

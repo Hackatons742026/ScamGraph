@@ -13,6 +13,28 @@ def test_health_and_unknown_api():
     assert missing.json() == {"error": "not_found", "detail": "Not found"}
 
 
+def test_health_initializes_and_checks_configured_sqlite_database(tmp_path, monkeypatch):
+    database = tmp_path / "isolated" / "scamgraph.db"
+    monkeypatch.setenv("SCAMGRAPH_DB", str(database))
+
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "version": "1"}
+    assert database.is_file()
+
+
+def test_health_reports_safe_not_ready_error_for_unusable_database_path(tmp_path, monkeypatch):
+    database_parent = tmp_path / "a-file"
+    database_parent.write_text("synthetic", encoding="utf-8")
+    monkeypatch.setenv("SCAMGRAPH_DB", str(database_parent / "scamgraph.db"))
+
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "http_error", "detail": "Database is not ready"}
+
+
 def test_spa_serves_assets_and_fallback_without_path_escape(tmp_path, monkeypatch):
     dist = tmp_path / "dist"
     dist.mkdir()

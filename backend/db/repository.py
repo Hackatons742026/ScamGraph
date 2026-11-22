@@ -34,6 +34,13 @@ class Repository:
     def _connection(self) -> sqlite3.Connection:
         return connect(self.path)
 
+    def health_check(self) -> None:
+        """Confirm the initialized SQLite database is readable and consistent."""
+        with self._connection() as db:
+            result = db.execute("PRAGMA quick_check").fetchone()
+        if result is None or result[0] != "ok":
+            raise sqlite3.DatabaseError("SQLite integrity check failed")
+
     def save_incident(self, incident: Incident) -> None:
         ingested_at = datetime.now(timezone.utc).isoformat()
         values = (

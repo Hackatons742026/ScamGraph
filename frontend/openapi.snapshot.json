@@ -1031,14 +1031,14 @@
             "description": "Unprocessable Entity"
           },
           "501": {
-            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Not Implemented"
           }
         }
       }
@@ -1099,7 +1099,7 @@
             }
           },
           "501": {
-            "description": "Successful Response",
+            "description": "Not Implemented",
             "content": {
               "application/json": {
                 "schema": {
@@ -1171,16 +1171,11 @@
             }
           },
           "501": {
-            "description": "Successful Response",
+            "description": "Not Implemented",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse",
-                  "items": {
-                    "$ref": "#/components/schemas/CampaignDetail"
-                  },
-                  "type": "array",
-                  "title": "Response Split Campaign Api Campaigns Split Post"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1313,6 +1308,40 @@
           "loo_routing"
         ],
         "title": "Ablation"
+      },
+      "AnalystEdgeOverride": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "recorded_at": {
+            "type": "string",
+            "title": "Recorded At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "recorded_at"
+        ],
+        "title": "AnalystEdgeOverride"
       },
       "ArtifactDetail": {
         "properties": {
@@ -2612,6 +2641,17 @@
             ],
             "title": "Reason Summary"
           },
+          "ingested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingested At"
+          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ArtifactSummary"
@@ -3388,40 +3428,6 @@
           "event"
         ],
         "title": "TimelineItem"
-      },
-      "AnalystEdgeOverride": {
-        "properties": {
-          "decision": {
-            "type": "string",
-            "enum": [
-              "confirm",
-              "reject"
-            ],
-            "title": "Decision"
-          },
-          "recorded_at": {
-            "type": "string",
-            "title": "Recorded At"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "decision",
-          "recorded_at"
-        ],
-        "title": "AnalystEdgeOverride"
       }
     }
   }

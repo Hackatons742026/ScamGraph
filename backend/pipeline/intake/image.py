@@ -34,6 +34,21 @@ def parse_image(
                 error="file not found",
             )
 
+        try:
+            from PIL import Image, UnidentifiedImageError
+        except ImportError:
+            Image = None
+            UnidentifiedImageError = OSError
+        if Image is not None:
+            try:
+                with Image.open(image_path) as opened:
+                    opened.verify()
+            except (UnidentifiedImageError, OSError, ValueError):
+                return ImageParseResult(
+                    parse_status=ParseStatus.FAILED,
+                    error="invalid or unreadable image",
+                )
+
         raw = image_path.read_bytes()
         digest = hashlib.sha256(raw).hexdigest()
         dest_rel = f"media/{digest}{image_path.suffix.lower() or '.bin'}"

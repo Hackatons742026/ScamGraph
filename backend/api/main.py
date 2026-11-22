@@ -1,11 +1,13 @@
 """ScamGraph FastAPI entry point and production SPA fallback."""
 
 from pathlib import Path
+import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
+from . import live
 from .routes import router
 
 app = FastAPI(title="ScamGraph DNA", version="1")
@@ -27,6 +29,11 @@ def validation_error(_request: Request, exc: RequestValidationError) -> JSONResp
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
+    try:
+        if repo := live.repository():
+            repo.health_check()
+    except (OSError, sqlite3.Error):
+        raise HTTPException(status_code=503, detail="Database is not ready") from None
     return {"status": "ok", "version": "1"}
 
 
