@@ -49,7 +49,7 @@ describe("Campaign detail page", () => {
     expect(within(timeline).getByText("2026-11-01")).toBeInTheDocument();
   });
 
-  it("labels leave-one-out classification separately from current campaign membership", async () => {
+  it("explains a member decision that predates its grouping", async () => {
     const member = incidents.find((item) => item.id === "inc_alpha_1")!;
     member.outcome = "new_candidate";
     member.reason_summary = "No campaign-level match was found with sufficient coverage.";
@@ -60,8 +60,20 @@ describe("Campaign detail page", () => {
     const row = within(members).getByRole("link", { name: member.label }).closest("tr") as HTMLElement;
     expect(within(row).getByText("In campaign")).toBeInTheDocument();
     expect(row).toHaveTextContent(
-      "Latest leave-one-out classification: New Campaign Candidate. No campaign-level match was found with sufficient coverage.",
+      "Classified as New Campaign Candidate before grouping. No campaign-level match was found with sufficient coverage.",
     );
+  });
+
+  it("shows a consistent member decision without a prefix", async () => {
+    const member = incidents.find((item) => item.id === "inc_alpha_1")!;
+    member.outcome = "known_campaign";
+    member.reason_summary = "Grouped with 1 other incident in this campaign via tier A.";
+    renderApp("/campaigns/camp_alpha");
+
+    await screen.findByRole("heading", { level: 1, name: "Synthetic Campaign Alpha" });
+    const row = within(card("Members")).getByRole("link", { name: member.label }).closest("tr") as HTMLElement;
+    expect(row).toHaveTextContent("Grouped with 1 other incident in this campaign via tier A.");
+    expect(row).not.toHaveTextContent("before grouping");
   });
 
   it("opens a member link's evidence in the shared edge panel", async () => {

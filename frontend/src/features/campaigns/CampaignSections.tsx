@@ -45,8 +45,9 @@ export function MembersCard({ members }: { members: IncidentSummary[] }) {
                       <Link to={incidentHref(m.id)} className="font-medium text-slate-900 hover:underline">{m.label}</Link>
                       {m.reason_summary && (
                         <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
-                          {m.status === "in_campaign" && m.outcome
-                            ? `Latest leave-one-out classification: ${OUTCOME[m.outcome]}. `
+                          {/* Decisions agree with membership after re-analysis; older databases may still differ. */}
+                          {m.status === "in_campaign" && m.outcome && m.outcome !== "known_campaign"
+                            ? `Classified as ${OUTCOME[m.outcome]} before grouping. `
                             : ""}
                           {m.reason_summary}
                         </p>

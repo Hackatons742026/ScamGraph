@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ignoreReasonLabel } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
-function EvidenceRow({ item }: { item: EvidenceItem }) {
+function EvidenceRow({ item, artifactName }: { item: EvidenceItem; artifactName?: string }) {
   const ignoreLabel = item.ignored ? ignoreReasonLabel(item.ignore_reason) : null;
   return (
     <li
@@ -30,7 +30,7 @@ function EvidenceRow({ item }: { item: EvidenceItem }) {
       <div className="shrink-0 text-xs text-slate-500">
         {item.artifact_id ? (
           <span>
-            Artifact <span className="font-mono text-slate-700">{item.artifact_id}</span>
+            From <span className="text-slate-700">{artifactName ?? "an artifact"}</span>
             {item.funnel_step != null ? ` · funnel step ${item.funnel_step}` : ""}
           </span>
         ) : (
@@ -41,7 +41,14 @@ function EvidenceRow({ item }: { item: EvidenceItem }) {
   );
 }
 
-export function EvidenceList({ evidence }: { evidence: EvidenceItem[] }) {
+export function EvidenceList({
+  evidence,
+  artifactNames = {},
+}: {
+  evidence: EvidenceItem[];
+  /** Display names by artifact id, so rows never show raw identifiers. */
+  artifactNames?: Record<string, string>;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -52,7 +59,11 @@ export function EvidenceList({ evidence }: { evidence: EvidenceItem[] }) {
         {evidence.length === 0 ? (
           <p className="text-sm text-slate-500">No evidence linked to this incident.</p>
         ) : (
-          <ul>{evidence.map((item) => <EvidenceRow key={item.id} item={item} />)}</ul>
+          <ul>
+            {evidence.map((item) => (
+              <EvidenceRow key={item.id} item={item} artifactName={artifactNames[item.artifact_id]} />
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>

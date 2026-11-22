@@ -187,8 +187,9 @@ export function resetMutableFixtures() {
 }
 
 const artifactsByKind: RunSummary["artifacts_by_kind"] = {
-  har: { total: 4, parsed: 4, failed: 0 }, html: { total: 5, parsed: 5, failed: 0 }, image: { total: 4, parsed: 4, failed: 0 },
-  video: { total: 1, parsed: 1, failed: 0 }, adlib_json: { total: 1, parsed: 1, failed: 0 }, unknown: { total: 1, parsed: 0, failed: 1 },
+  har: { total: 4, parsed: 4, failed: 0, partial: 0 }, html: { total: 5, parsed: 5, failed: 0, partial: 0 },
+  image: { total: 4, parsed: 4, failed: 0, partial: 0 }, video: { total: 1, parsed: 1, failed: 0, partial: 1 },
+  adlib_json: { total: 1, parsed: 1, failed: 0, partial: 0 }, unknown: { total: 1, parsed: 0, failed: 1, partial: 0 },
 };
 const totalArtifacts = Object.values(artifactsByKind).reduce((n, k) => n + k.total, 0);
 const countStatus = (s: IncidentSummary["status"]) => incidents.filter((i) => i.status === s).length;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatTimestamp, humanize, ignoreReasonLabel } from "./domain";
+import { formatDate, formatTimestamp, humanize, ignoreReasonLabel, shortUrl } from "./domain";
 
 describe("humanize", () => {
   it("turns snake_case evidence types into words", () => {
@@ -26,8 +26,16 @@ describe("formatTimestamp", () => {
 });
 
 describe("ignoreReasonLabel", () => {
+  it("shortens URLs to host and path and hides query strings", () => {
+    expect(shortUrl("https://offer.example-scam.test/landing?gclid=abc&x=1")).toBe("offer.example-scam.test/landing?…");
+    expect(shortUrl("https://offer.example-scam.test/")).toBe("offer.example-scam.test");
+    expect(shortUrl("not a url")).toBe("not a url");
+    expect(shortUrl(`https://a.test/${"x".repeat(200)}`).length).toBe(80);
+  });
+
   it("labels known reasons, falls back for unknown ones, and accepts null or a missing field (optional in the live OpenAPI)", () => {
     expect(ignoreReasonLabel("cdn_ip")).toBe("CDN / shared-hosting IP");
+    expect(ignoreReasonLabel("platform_domain")).toBe("Shared platform domain (not operator infrastructure)");
     expect(ignoreReasonLabel("future_reason")).toBe("Ignored by rule");
     expect(ignoreReasonLabel(null)).toBeNull();
     expect(ignoreReasonLabel(undefined)).toBeNull();

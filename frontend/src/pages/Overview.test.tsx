@@ -16,6 +16,10 @@ describe("Overview page", () => {
     expect(await screen.findByText("Latest run")).toBeInTheDocument();
     expect(screen.getByText("Artifact coverage")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /^Kind$/i })).toBeInTheDocument();
+    // Partial parses (e.g. a video without frames) are shown, not hidden inside "Parsed".
+    expect(screen.getByRole("columnheader", { name: /^Partial$/i })).toBeInTheDocument();
+    const videoRow = screen.getByText("video").closest("tr") as HTMLElement;
+    expect(within(videoRow).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["video", "1", "1", "1", "0"]);
     expect(screen.getByText("har")).toBeInTheDocument();
     expect(within(screen.getByRole("main")).getByText("Incidents").closest("div")).toHaveTextContent(String(latestRun.incidents));
     expect(screen.getByRole("link", { name: /incidents list/i })).toHaveAttribute("href", "/incidents");

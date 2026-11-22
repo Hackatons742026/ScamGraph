@@ -90,7 +90,10 @@ export function RunSummaryCards({ run }: { run: RunSummary }) {
       <Card>
         <CardHeader>
           <CardTitle>Artifact coverage</CardTitle>
-          <p className="text-xs text-slate-500">Parsed vs failed counts by artifact kind for this run.</p>
+          <p className="text-xs text-slate-500">
+            Parsed vs failed counts by artifact kind for this run. Partial means parsed with gaps (for example a
+            video without extracted frames).
+          </p>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -100,6 +103,7 @@ export function RunSummaryCards({ run }: { run: RunSummary }) {
                   <th className="py-2 pr-3 font-medium">Kind</th>
                   <th className="py-2 pr-3 font-medium">Total</th>
                   <th className="py-2 pr-3 font-medium">Parsed</th>
+                  <th className="py-2 pr-3 font-medium">Partial</th>
                   <th className="py-2 font-medium">Failed</th>
                 </tr>
               </thead>
@@ -109,6 +113,7 @@ export function RunSummaryCards({ run }: { run: RunSummary }) {
                     <td className="py-2 pr-3 font-medium text-slate-800">{kind}</td>
                     <td className="py-2 pr-3 tabular-nums">{stats.total}</td>
                     <td className="py-2 pr-3 tabular-nums text-emerald-700">{stats.parsed}</td>
+                    <td className="py-2 pr-3 tabular-nums text-amber-700">{stats.partial ?? 0}</td>
                     <td className="py-2 tabular-nums text-red-700">{stats.failed}</td>
                   </tr>
                 ))}

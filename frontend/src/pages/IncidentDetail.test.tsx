@@ -32,12 +32,29 @@ describe("Incident detail page", () => {
     expect(within(evidenceCard).getAllByRole("img", { name: new RegExp(`^${TIER.A.label}`) }).length).toBeGreaterThan(0);
     expect(within(evidenceCard).getByText("pixel_****1111")).toBeInTheDocument();
 
+    // Evidence names its source artifact; raw artifact ids are never shown.
+    expect(within(evidenceCard).getAllByText("step_2.har").length).toBeGreaterThan(0);
+    expect(within(evidenceCard).queryByText("art_alpha2_har")).not.toBeInTheDocument();
+
     // Ignored evidence is muted with a reason.
     expect(within(evidenceCard).getByText(new RegExp(`Ignored: ${ignoreReasonLabel("cdn_ip")}`))).toBeInTheDocument();
 
     // Failed artifacts call out the reason.
     expect(screen.getByText(/1 failed artifact/i)).toBeInTheDocument();
     expect(screen.getByText(/Unrecognised format/i)).toBeInTheDocument();
+  });
+
+  it("lists each funnel step's redirect hops", async () => {
+    renderApp("/incidents/inc_alpha_1");
+    const hops = await screen.findByRole("list", { name: "Redirects in step 1" });
+    expect(within(hops).getAllByRole("listitem")).toHaveLength(2);
+    // Hops show host and path; the full redacted URL stays available as a tooltip.
+    expect(within(hops).getByText("click.example-scam.test/click")).toHaveAttribute(
+      "title",
+      "https://click.example-scam.test/click",
+    );
+    expect(within(hops).getByText("news.example-scam.test/a?…")).toBeInTheDocument();
+    expect(hops).toHaveTextContent("302 →");
   });
 
   it("loads artifact detail from GET /api/artifacts/{id}", async () => {

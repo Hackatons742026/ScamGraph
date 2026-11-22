@@ -17,7 +17,7 @@ function compare(a: IncidentSummary, b: IncidentSummary, key: SortKey, dir: Sort
   const sign = dir === "asc" ? 1 : -1;
   switch (key) {
     case "label":
-      return sign * a.label.localeCompare(b.label);
+      return sign * a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
     case "status":
       return sign * a.status.localeCompare(b.status);
     case "coverage":

@@ -9,6 +9,18 @@ export const humanize = (s: string): string => s.replace(/_/g, " ");
 export const formatDate = (iso: string | null): string => (iso ? iso.slice(0, 10) : "—");
 
 /** Format an RFC 3339 timestamp in the viewer's browser locale and timezone. */
+/** Host and path of a (redacted) URL; tracking query strings stay in the tooltip. */
+export function shortUrl(url: string, max = 80): string {
+  let text = url;
+  try {
+    const parsed = new URL(url);
+    text = `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}${parsed.search ? "?…" : ""}`;
+  } catch {
+    // Not an absolute URL: show it as given.
+  }
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
 export function formatTimestamp(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -56,6 +68,7 @@ const IGNORE_REASON: Record<string, string> = {
   placeholder_phone: "Placeholder phone number",
   small_doc: "Helper document < 5 KB",
   high_df: "Too common (> 30% of incidents)",
+  platform_domain: "Shared platform domain (not operator infrastructure)",
   other: "Ignored by rule",
 };
 

@@ -384,6 +384,11 @@ export interface components {
             parsed: number;
             /** Failed */
             failed: number;
+            /**
+             * Partial
+             * @default 0
+             */
+            partial: number;
         };
         /** ArtifactSummary */
         ArtifactSummary: {
