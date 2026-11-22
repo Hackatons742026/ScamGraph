@@ -227,6 +227,7 @@ __marimo__/
 # ============================================================
 # Dataset, cache and database (SCAMGRAPH_DATA_DIR defaults to data/raw/)
 data/
+/do_udostepnienia/
 *.db
 *.db-journal
 
