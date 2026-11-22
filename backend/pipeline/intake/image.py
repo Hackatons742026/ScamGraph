@@ -31,10 +31,26 @@ def parse_image(
         if not image_path.is_file():
             return ImageParseResult(
                 parse_status=ParseStatus.FAILED,
-                error="file not found",
+                error="Image file not found.",
             )
 
         raw = image_path.read_bytes()
+        try:
+            from PIL import Image
+        except ImportError:
+            # Pillow is a normal dependency, but retain the image if an unusually
+            # minimal runtime omits it; pHash/OCR will soft-fail below.
+            pass
+        else:
+            try:
+                with Image.open(image_path) as opened:
+                    opened.load()
+            except Exception:  # noqa: BLE001 — malformed uploads must not escape intake
+                return ImageParseResult(
+                    parse_status=ParseStatus.FAILED,
+                    error="Image could not be decoded. Upload a valid PNG, JPEG, or WEBP image.",
+                )
+
         digest = hashlib.sha256(raw).hexdigest()
         dest_rel = f"media/{digest}{image_path.suffix.lower() or '.bin'}"
         dest = cache_root() / dest_rel
@@ -43,10 +59,8 @@ def parse_image(
 
         phash = _phash_hex(image_path)
         ocr = ocr_image(image_path)
-        status = ParseStatus.OK
-        error = ocr.error
-        if ocr.engine is None and ocr.error:
-            status = ParseStatus.PARTIAL
+        status = ParseStatus.PARTIAL if ocr.engine is None or ocr.error else ParseStatus.OK
+        error = ocr.error or ("OCR engine unavailable" if ocr.engine is None else None)
 
         media = MediaRef(
             id=f"{artifact_id}_img",
@@ -64,10 +78,10 @@ def parse_image(
             media=media,
             ocr_engine=ocr.engine,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — exception messages can contain local paths
         return ImageParseResult(
             parse_status=ParseStatus.FAILED,
-            error=f"{type(exc).__name__}: {exc}"[:200],
+            error="Image processing failed. Verify the file and try again.",
         )
 
 

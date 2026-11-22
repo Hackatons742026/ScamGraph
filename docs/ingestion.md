@@ -53,7 +53,14 @@ Used by `POST /api/classify` (co-5).
 | `SCAMGRAPH_ASR_TIMEOUT` | no | `120` | Soft timeout (seconds) for whisper inference |
 | `SCAMGRAPH_ASR_MAX_BYTES` | no | `52428800` | Skip ASR when media exceeds this size |
 
-System tools: `ffmpeg` (video frames + ASR audio extract), `tesseract` + `tesseract-ocr-pol` (OCR). Missing tools soft-fail (`PARTIAL` / empty OCR / empty ASR).
+System tools: `ffmpeg` (video frames + ASR audio extract), `tesseract` + the
+`tesseract-ocr-pol` and `tesseract-ocr-eng` trained data (OCR). The Docker image
+installs and verifies Polish Tesseract data at build time, so OCR works offline
+at runtime without downloading models. Missing optional tools soft-fail; a
+valid image remains available as `PARTIAL` with its cached media and pHash.
+Malformed images fail with a safe format hint. Optional EasyOCR is not part of
+the default offline image because its model weights require separate local
+provisioning.
 
 Optional heavy deps: `backend/requirements-optional.txt` (EasyOCR, faster-whisper). ASR uses faster-whisper **small**, offline (`local_files_only`); missing package/model never fails the run — empty transcript, no crash. Transcript sentences (≥10 words, same gate as OCR/HTML extractors) become tier-C `shared_sentence` evidence.
 

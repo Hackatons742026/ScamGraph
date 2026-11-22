@@ -17,7 +17,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol \
+    && tesseract --list-langs 2>&1 | grep -qx pol \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
     && useradd --system --uid 10001 --create-home scamgraph \
     && mkdir -p /var/lib/scamgraph/cache \
     && chown -R scamgraph:scamgraph /var/lib/scamgraph
