@@ -9,7 +9,7 @@ type Props<T> = {
   query: UseQueryResult<T>;
   children: (data: T) => ReactNode;
   isEmpty?: (data: T) => boolean;
-  emptyText?: string;
+  emptyText?: ReactNode;
 };
 
 /** Standard loading / error / empty / data rendering for every screen. */

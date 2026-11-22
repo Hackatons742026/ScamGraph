@@ -241,6 +241,9 @@ data/
 # Synthetic test fixtures are allowed (never real dataset files)
 !backend/tests/fixtures/**
 !frontend/src/test/fixtures/**
+# Keep bytecode out even though fixtures/ is re-included above
+backend/tests/fixtures/**/__pycache__/
+frontend/src/test/fixtures/**/__pycache__/
 
 # Frontend
 node_modules/

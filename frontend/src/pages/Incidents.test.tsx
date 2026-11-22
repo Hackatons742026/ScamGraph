@@ -23,6 +23,15 @@ describe("Incidents page", () => {
     expect(screen.getByText(new RegExp(first.id))).toBeInTheDocument();
   });
 
+  it("applies status filter from the URL query", async () => {
+    renderApp("/incidents?status=new_candidate");
+    await screen.findByRole("button", { name: STATUS.new_candidate });
+    expect(screen.getByRole("button", { name: STATUS.new_candidate })).toHaveAttribute("aria-pressed", "true");
+    const candidate = incidents.find((i) => i.status === "new_candidate")!;
+    expect(screen.getByRole("link", { name: candidate.label })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Alpha-1/i })).not.toBeInTheDocument();
+  });
+
   it("filters by status and coverage", async () => {
     renderApp("/incidents");
     await screen.findByRole("link", { name: incidents[0]!.label });

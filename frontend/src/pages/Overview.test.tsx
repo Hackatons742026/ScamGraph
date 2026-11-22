@@ -19,6 +19,16 @@ describe("Overview page", () => {
     expect(screen.getByText("har")).toBeInTheDocument();
     expect(within(screen.getByRole("main")).getByText("Incidents").closest("div")).toHaveTextContent(String(latestRun.incidents));
     expect(screen.getByRole("link", { name: /incidents list/i })).toHaveAttribute("href", "/incidents");
+    expect(screen.getByText("Outside campaigns")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Outside campaigns/i })).toHaveAttribute(
+      "href",
+      "/incidents?status=new_candidate",
+    );
+    expect(screen.getByRole("link", { name: /New candidates/i })).toHaveAttribute(
+      "href",
+      "/incidents?status=new_candidate",
+    );
+    expect(screen.getByRole("link", { name: /Needs review/i })).toHaveAttribute("href", "/review");
   });
 
   it("shows loading then data", async () => {

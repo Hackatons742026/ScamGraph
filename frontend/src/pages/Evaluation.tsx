@@ -37,7 +37,9 @@ export function Evaluation() {
           <div className="flex flex-col gap-4">
             {!hasLabelledPairs(r.pairs) && (
               <p role="note" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Not from a labelled evaluation run. The scenarios and leave-one-out routing below use the built-in synthetic cases: they show the logic works, not performance on real data. Pair metrics, false merges and ablation need labelled pairs.
+                Not a labelled evaluation of your imported dataset. Scenarios and leave-one-out below use{" "}
+                <strong>built-in synthetic fixtures</strong> — they only prove the evaluation wiring works, not DANE or live
+                campaign quality. Pair metrics, false merges and ablation stay empty until you supply labelled pairs.
               </p>
             )}
             {r.generated_at !== null && <p className="text-xs text-slate-500">Generated {r.generated_at.slice(0, 16).replace("T", " ")} UTC</p>}
@@ -47,8 +49,15 @@ export function Evaluation() {
             <Section title="Pair metrics" description="Are incident pairs grouped as the labels say? Campaign and network level are scored separately.">
               <PairMetrics pairs={r.pairs} falseMerges={r.false_merges} />
             </Section>
-            <Section title="Leave-one-out routing" description="Each incident is held out, memory rebuilt without it, then classified: Known Campaign, New Campaign Candidate or Needs Review.">
-              <LooRouting loo={r.loo} incidentLabels={incidentLabels} />
+            <Section
+              title="Leave-one-out routing"
+              description={
+                hasLabelledPairs(r.pairs)
+                  ? "Each incident is held out, memory rebuilt without it, then classified: Known Campaign, New Campaign Candidate or Needs Review."
+                  : "Synthetic fixtures only — accuracy here is not performance on your imported incidents."
+              }
+            >
+              <LooRouting loo={r.loo} incidentLabels={incidentLabels} synthetic={!hasLabelledPairs(r.pairs)} />
             </Section>
             <Section title="Ablation" description="The same evaluation with signal groups removed, showing what each contributes.">
               <AblationTable rows={r.ablation} measured={hasLabelledPairs(r.pairs)} />

@@ -33,9 +33,18 @@ function formatWhen(iso: string | null) {
   return new Date(iso).toLocaleDateString();
 }
 
-export function IncidentsTable({ incidents }: { incidents: IncidentSummary[] }) {
+export function IncidentsTable({
+  incidents,
+  initialStatuses = [],
+}: {
+  incidents: IncidentSummary[];
+  /** Pre-select status filters (e.g. from `?status=new_candidate`). */
+  initialStatuses?: IncidentStatus[];
+}) {
   const navigate = useNavigate();
-  const [statusFilter, setStatusFilter] = useState<Set<IncidentStatus>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<Set<IncidentStatus>>(
+    () => new Set(initialStatuses.filter((s) => ALL_STATUSES.includes(s))),
+  );
   const [coverageFilter, setCoverageFilter] = useState<CoverageLevel | "all">("all");
   const [sortKey, setSortKey] = useState<SortKey>("last_seen");
   const [sortDir, setSortDir] = useState<SortDir>("desc");

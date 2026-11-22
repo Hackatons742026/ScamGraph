@@ -15,6 +15,16 @@ from backend.pipeline.models import Evidence
 from backend.engine.linking import link_incidents
 from backend.engine.memory import classify, cluster_incidents
 from .schemas import *  # noqa: F403
+
+
+def _safe_incident_label(title: str | None, index: int) -> str:
+    """Prefer discover folder title; fall back when empty or path-like."""
+    text = (title or "").strip()
+    if not text or any(ch in text for ch in "/\\:"):
+        return f"Incident {index}"
+    return text
+
+
 def stable_campaign(result: object, clusters: object, incident_id: str) -> str | None: return clusters.campaign_by_incident.get(incident_id) if result.outcome == "known_campaign" else None
 def repository() -> Repository | None:
     return Repository(os.environ["SCAMGRAPH_DB"]) if os.environ.get("SCAMGRAPH_DB") else None
@@ -84,8 +94,10 @@ def group_context(repo: Repository) -> dict:
     campaigns = repo.list_campaigns()
     memberships = repo.list_membership()
     incidents = sorted(repo.list_incidents(), key=lambda item: (item["first_seen"] or "", item["id"]))
-    incident_labels = {item["id"]: f"Incident {index}"
-                       for index, item in enumerate(incidents, 1)}
+    incident_labels = {
+        item["id"]: _safe_incident_label(item.get("title"), index)
+        for index, item in enumerate(incidents, 1)
+    }
     rows_by_id = {item["id"]: item for item in campaigns}
     labels: dict[str, str] = {}
     for level, prefix in (("campaign", "Campaign"), ("network", "Network")):
