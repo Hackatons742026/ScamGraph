@@ -6,6 +6,8 @@ import type { RunSummary } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { RUN_STATUS } from "@/lib/domain";
 
+const AFTER_IMPORT = [["runs", "latest"], ["incidents"], ["artifacts"], ["campaigns"], ["graph"]];
+
 function isActive(status: RunSummary["status"] | undefined) {
   return status === "pending" || status === "running";
 }
@@ -51,8 +53,9 @@ export function ImportRunButton() {
 
   useEffect(() => {
     if (!run || isActive(run.status) || pollKey === 0) return;
-    void client.invalidateQueries({ queryKey: ["runs", "latest"] });
-    void client.invalidateQueries({ queryKey: ["incidents"] });
+    // An import rewrites incidents, artifacts, links and groups: every view built from them is stale now,
+    // not only after the 30 s staleTime.
+    for (const queryKey of AFTER_IMPORT) void client.invalidateQueries({ queryKey });
   }, [run, pollKey, client]);
 
   return (

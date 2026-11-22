@@ -1,6 +1,8 @@
+import { Link } from "react-router";
 import type { Decision } from "@/api/types";
 import { OutcomeBadge } from "@/components/domain/badges";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { campaignHref } from "@/features/campaigns/links";
 import { OUTCOME } from "@/lib/domain";
 import { EvidenceChips } from "./EvidenceList";
 
@@ -28,7 +30,10 @@ export function DecisionCard({ decision }: { decision: Decision | null }) {
             </div>
             {decision.campaign_label && (
               <p className="text-sm text-slate-700">
-                Campaign: <span className="font-medium">{decision.campaign_label}</span>
+                Campaign:{" "}
+                <Link to={campaignHref(decision.campaign_id)} className="font-medium underline-offset-2 hover:underline">
+                  {decision.campaign_label}
+                </Link>
               </p>
             )}
             <p className="text-xs text-slate-500">Decided {new Date(decision.decided_at).toLocaleString()}</p>

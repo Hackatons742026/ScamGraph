@@ -87,7 +87,7 @@ describe("Classify page", () => {
       exclude_incident: known.id,
     });
     expect(await screen.findByText(OUTCOME.known_campaign)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: known.campaign_label! })).toHaveAttribute("href", "/campaigns");
+    expect(screen.getByRole("link", { name: known.campaign_label! })).toHaveAttribute("href", `/campaigns/${known.campaign_id}`);
   });
 
   it("mock mode says the result is synthetic and nothing was saved", async () => {

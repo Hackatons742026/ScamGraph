@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ExportLinks } from "@/features/campaigns/ExportLinks";
+import { campaignHref, graphFocusHref } from "@/features/campaigns/links";
 import { MergeDialog } from "@/features/overrides/MergeDialog";
 import { SplitDialog } from "@/features/overrides/SplitDialog";
 import { humanize, formatDate } from "@/lib/domain";
@@ -61,7 +62,7 @@ export function Campaigns() {
 
   return (
     <>
-      <PageHeader title="Campaigns" description="Campaigns (strong shared evidence) and networks (shared tooling or infrastructure), with the strongest evidence for each." />
+      <PageHeader title="Campaigns" description="Campaigns (strong shared evidence) and networks (shared tooling or infrastructure), with the strongest evidence for each. Open a name for its members, links and timeline." />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div role="group" aria-label="Filter by level" className="flex gap-1">
           {LEVELS.map((l) => (
@@ -114,7 +115,7 @@ export function Campaigns() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <Link to={`/graph?campaign=${encodeURIComponent(c.id)}`} className="font-medium hover:underline">{c.label}</Link>
+                        <Link to={campaignHref(c.id)} className="font-medium hover:underline">{c.label}</Link>
                         {c.network_id && <div className="text-xs text-slate-500">part of a wider network</div>}
                       </td>
                       <td className="px-3 py-2"><Badge variant={c.level === "campaign" ? "danger" : "outline"}>{c.level}</Badge></td>
@@ -131,13 +132,16 @@ export function Campaigns() {
                       <td className="px-3 py-2 tabular-nums">{formatDate(c.first_seen)}</td>
                       <td className="px-3 py-2 tabular-nums">{formatDate(c.last_seen)}</td>
                       <td className="px-3 py-2">
-                        {c.level === "campaign" && c.size >= 2 ? (
-                          <Button type="button" size="sm" variant="outline" onClick={() => setSplitTarget(c)}>
-                            Split
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link to={graphFocusHref(c.id)} aria-label={`Open ${c.label} in the graph`} className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline">
+                            Graph
+                          </Link>
+                          {c.level === "campaign" && c.size >= 2 && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setSplitTarget(c)}>
+                              Split
+                            </Button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         {c.level === "campaign" ? <ExportLinks campaignId={c.id} label={c.label} /> : <span className="text-xs text-slate-400" title="Exports are per campaign; networks are not exported">—</span>}

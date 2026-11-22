@@ -50,7 +50,7 @@ describe("OutcomeCard", () => {
 
     if (outcome === "known_campaign") {
       const link = screen.getByRole("link", { name: result.campaign_label! });
-      expect(link).toHaveAttribute("href", "/campaigns");
+      expect(link).toHaveAttribute("href", `/campaigns/${result.campaign_id}`);
     } else {
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     }

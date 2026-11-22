@@ -23,6 +23,16 @@ describe("Incidents page", () => {
     expect(screen.getByText(new RegExp(first.id))).toBeInTheDocument();
   });
 
+  it("links the campaign column to the campaign page, not the incident row", async () => {
+    const member = incidents.find((i) => i.campaign_id === "camp_alpha")!;
+    const { router } = renderApp("/incidents");
+    const [link] = await screen.findAllByRole("link", { name: member.campaign_label! });
+    expect(link).toHaveAttribute("href", "/campaigns/camp_alpha");
+
+    await userEvent.click(link!);
+    expect(router.state.location.pathname).toBe("/campaigns/camp_alpha");
+  });
+
   it("applies status filter from the URL query", async () => {
     renderApp("/incidents?status=new_candidate");
     await screen.findByRole("button", { name: STATUS.new_candidate });
@@ -55,15 +65,17 @@ describe("Incidents page", () => {
 
     const table = screen.getByRole("table");
     await userEvent.click(within(table).getByRole("button", { name: /Incident/i }));
-    const labelsAsc = within(table)
-      .getAllByRole("link")
-      .map((el) => el.textContent);
+    // Incident links only: the campaign column links to campaign pages.
+    const incidentLabels = () =>
+      within(table)
+        .getAllByRole("link")
+        .filter((el) => el.getAttribute("href")?.startsWith("/incidents/"))
+        .map((el) => el.textContent);
+    const labelsAsc = incidentLabels();
     expect(labelsAsc).toEqual([...labelsAsc].sort((a, b) => a!.localeCompare(b!)));
 
     await userEvent.click(within(table).getByRole("button", { name: /Incident/i }));
-    const labelsDesc = within(table)
-      .getAllByRole("link")
-      .map((el) => el.textContent);
+    const labelsDesc = incidentLabels();
     expect(labelsDesc).toEqual([...labelsAsc].reverse());
   });
 
