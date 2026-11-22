@@ -5,7 +5,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 
 from backend.exports import (
@@ -70,7 +70,7 @@ def incident(incident_id: str) -> IncidentDetail:
         artifacts = [live.artifact(a) for a in repo.get_artifacts(incident_id)]
         evidence = [live.evidence(e) for e in repo.get_evidence(incident_id)]
         edges = [live.edge(e) for e in repo.list_edges()
-                 if incident_id in {e["a_incident"], e["b_incident"]}]
+                 if e.get("status") != "rejected" and incident_id in {e["a_incident"], e["b_incident"]}]
         decision_row = next((d for d in repo.list_decisions() if d["incident_id"] == incident_id), None)
         reason_kind = "match" if decision_row and decision_row["outcome"] == "known_campaign" else "coverage"
         decision = Decision(outcome=decision_row["outcome"], campaign_id=decision_row["campaign_id"],
@@ -122,7 +122,8 @@ def campaign(campaign_id: str) -> CampaignDetail:
         item = live.campaign(repo, row, groups)
         members = [live.incident(repo, repo.get_incident(i), groups) for i in item.incident_ids]
         edges = [live.edge(e) for e in repo.list_edges()
-                 if e["a_incident"] in item.incident_ids and e["b_incident"] in item.incident_ids]
+                 if e.get("status") != "rejected"
+                 and e["a_incident"] in item.incident_ids and e["b_incident"] in item.incident_ids]
         return CampaignDetail(**item.model_dump(), members=members, edges=edges, timeline=[])
     if campaign_id != seed.CAMPAIGN.id: raise HTTPException(404, "Campaign not found")
     return CampaignDetail(**seed.CAMPAIGN.model_dump(), members=[seed.INCIDENT],
@@ -149,7 +150,7 @@ def graph(campaign: str | None = None, tiers: str | None = None,
         rows = [row for row in repo.list_incidents()
                 if selected_ids is None or row["id"] in selected_ids]
         items = [live.incident(repo, row, groups) for row in rows]
-        edges = [live.edge(row) for row in repo.list_edges()]
+        edges = [live.edge(row) for row in repo.list_edges() if row.get("status") != "rejected"]
         visible_ids = {item.id for item in items}
         edges = [edge for edge in edges if edge.source in visible_ids and edge.target in visible_ids
                  and (not tiers or edge.tier.value in tiers.split(","))
@@ -219,22 +220,45 @@ def evaluation() -> EvalReport:
     return EvalReport.model_validate(build_report())
 
 @router.post("/edges/{edge_id}/decision", response_model=EdgeDecisionResponse,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
     responses={200: {"model": EdgeDecisionResponse, "description": "Decision recorded"}})
 def decide_edge(edge_id: str, body: EdgeDecisionRequest) -> EdgeDecisionResponse:
-    raise HTTPException(501, "Optional endpoint not enabled")
+    repo = live.repository()
+    if repo is None:
+        raise HTTPException(501, "Analyst decisions require a configured live database")
+    recorded_at = repo.record_edge_decision(edge_id, body.decision, body.note.strip()[:500] if body.note else None)
+    if recorded_at is None:
+        raise HTTPException(404, "Edge not found")
+    return EdgeDecisionResponse(edge_id=edge_id, decision=body.decision, recorded_at=recorded_at)
 
 @router.post("/campaigns/merge", response_model=CampaignDetail,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
     responses={200: {"model": CampaignDetail, "description": "Merged campaign"}})
 def merge_campaigns(body: MergeRequest) -> CampaignDetail:
-    raise HTTPException(501, "Optional endpoint not enabled")
+    repo = live.repository()
+    if repo is None:
+        raise HTTPException(501, "Campaign overrides require a configured live database")
+    try:
+        campaign_id = repo.merge_campaigns(body.campaign_ids, body.note.strip()[:500] if body.note else None)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return campaign(campaign_id)
 
 @router.post("/campaigns/split", response_model=list[CampaignDetail],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
     responses={200: {"model": list[CampaignDetail], "description": "Split campaigns"}})
 def split_campaign(body: SplitRequest) -> list[CampaignDetail]:
-    raise HTTPException(501, "Optional endpoint not enabled")
+    repo = live.repository()
+    if repo is None:
+        raise HTTPException(501, "Campaign overrides require a configured live database")
+    try:
+        campaign_ids = repo.split_campaign(
+            body.campaign_id, body.incident_ids, body.note.strip()[:500] if body.note else None
+        )
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return [campaign(campaign_id) for campaign_id in campaign_ids]
 
 @router.get("/exports/{name}")
 def export_campaign(name: str) -> Response:

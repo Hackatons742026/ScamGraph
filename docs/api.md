@@ -22,13 +22,19 @@ pipeline operations and `SCAMGRAPH_CACHE_DIR` controls generated media. Without
 | `GET /api/graph` | Graph nodes and edges; optional `campaign`, comma-separated `tiers`, and `levels` filters |
 | `POST /api/classify` | Classify a multipart upload, text, or URL against stored memory |
 | `GET /api/eval/report` | Deterministic synthetic scenarios and report contract |
+| `POST /api/edges/{edge_id}/decision` | Record an analyst's confirm/reject decision for a stored edge |
+| `POST /api/campaigns/merge` | Merge two or more campaign groups, preserving their incident membership |
+| `POST /api/campaigns/split` | Move a proper subset of campaign members into a new campaign |
 
 `POST /api/classify` accepts multipart fields `files`, `text`, `url`, and
 `exclude_incident`. The whole request limit is 10 MB and each uploaded file is
 limited to 5 MB. Filenames are reduced to basenames. Public projections mask
 display values and omit evidence hashes, source paths, and OCR text. Errors use
-`{ "error": "…", "detail": "…" }`. Optional mutation routes may be present
-in OpenAPI but currently return HTTP 501.
+`{ "error": "…", "detail": "…" }`. Override routes require a configured live
+database. They persist changes and audit records; rejecting an edge removes it
+from graph and incident projections. In synthetic mode they return HTTP 501.
+Campaign merge/split accepts an optional note; notes are capped at 500
+characters and stored only in the local audit log.
 
 ## Campaign exports
 
