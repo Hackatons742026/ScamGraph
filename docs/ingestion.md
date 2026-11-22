@@ -17,7 +17,22 @@ Owned by **cursor-backend** (`backend/pipeline/**`).
 Capture times come from HAR `startedDateTime`, capture-bundle manifests and Ad
 Library `timestamp` / `upload_date` / `epoch`; an incident's first and last seen
 dates are the earliest and latest of them. Pasted text and submitted URLs yield
-contact, sentence and domain evidence. Relative links, file names and other
+contact, sentence and domain evidence.
+
+Account identifiers are tier-A evidence, so one shared account links two
+incidents on its own: e-mail addresses (visible text and `mailto:` links;
+case-insensitive), bank accounts (IBAN with or without spaces, and 26-digit
+Polish NRB numbers stored as `PL` IBANs, all checksum-validated), phone numbers
+(9-15 digits, never inside an account number), WhatsApp and Telegram handles,
+and Ad Library advertiser/ad IDs. Displays are masked (`ab…@domain`,
+`PL61 **** 2874`, `48…78`), and sentence evidence masks any identifier it
+contains. Documentation placeholders such as `@example.com` are kept with
+`ignore_reason: "placeholder_email"`.
+
+Kit signals are compared by content: scripts are hashed from saved-page sidecar
+files or HAR response bodies, never matched by file name (`main.js`), and the
+URL parameter set ignores standard marketing parameters (`utm_*`, `fbclid`,
+`gclid`, …) and third-party requests and needs at least two names. Relative links, file names and other
 single-label hosts never become domain evidence, and local file paths never
 reach evidence displays. The Docker image ships `ffmpeg`, so video frames and
 their OCR are part of the containerized pipeline.

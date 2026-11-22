@@ -168,12 +168,13 @@ def test_har_hosts_without_a_domain_never_become_domain_evidence(tmp_path: Path)
     assert {e.display for e in evidence if e.type == "landing_domain"} == {"offer.example-synthetic.test"}
 
 
-def test_unsaved_relative_assets_show_only_a_file_name(tmp_path: Path) -> None:
+def test_unsaved_relative_assets_are_not_compared_by_file_name(tmp_path: Path) -> None:
     page = tmp_path / "bundle" / "dom.html"
     page.parent.mkdir()
-    page.write_text("<html><head><script src='resources/js/kit.min.js'></script></head><body>x</body></html>")
+    page.write_text("<html><head><script src='resources/js/main.js'></script></head><body>x</body></html>")
     evidence = extract_html(_artifact(page), parse_html(page, salt=SALT), salt=SALT)
-    assert [e.display for e in evidence if e.type == "js_hash"] == ["local:kit.min.js"]
+    # Without the saved file there is no content to compare; "main.js" alone proves nothing.
+    assert [e for e in evidence if e.type == "js_hash"] == []
 
 
 def test_capture_bundle_counts_as_having_a_har() -> None:

@@ -43,6 +43,15 @@ _GTM_RE = re.compile(r"\b(GTM-[A-Z0-9]+)\b")
 
 
 @dataclass
+class HarScript:
+    """A JavaScript response body, compared by content (never by file name)."""
+
+    host: str
+    name: str
+    sha256: str
+
+
+@dataclass
 class HarRequest:
     seq: int
     method: str
@@ -83,6 +92,7 @@ class HarParseResult:
     server_ips: list[str] = field(default_factory=list)
     post_endpoints: list[str] = field(default_factory=list)
     captured_at: str | None = None  # earliest entry startedDateTime (RFC 3339)
+    scripts: list[HarScript] = field(default_factory=list)
 
 
 def parse_har(path: Path | str, *, salt: str | None = None) -> HarParseResult:
@@ -153,6 +163,7 @@ def _parse_har(path: Path, *, salt: str) -> HarParseResult:
     hop_seq = 0
     partial = False
     started_times: list[datetime] = []
+    scripts: list[HarScript] = []
 
     try:
         entry_iter = iter_har_entries(path, salt=salt)
@@ -250,6 +261,12 @@ def _parse_har(path: Path, *, salt: str) -> HarParseResult:
                         )
 
                 resp_text = _response_text(resp_obj)
+                if host and mime and "javascript" in mime:
+                    body = _script_body(resp_obj)
+                    if body:
+                        name = parts.path.rstrip("/").rsplit("/", 1)[-1] or "script.js"
+                        scripts.append(HarScript(host=host.lower(), name=name[:80],
+                                                 sha256=hashlib.sha256(body.encode("utf-8")).hexdigest()))
                 if resp_text:
                     for url in _meta_refresh_urls(resp_text):
                         hop_seq += 1
@@ -313,6 +330,7 @@ def _parse_har(path: Path, *, salt: str) -> HarParseResult:
         server_ips=sorted(ips),
         post_endpoints=posts,
         captured_at=min(started_times).isoformat() if started_times else None,
+        scripts=scripts,
     )
 
 
@@ -357,6 +375,20 @@ def _post_body_text(req_obj: dict[str, Any]) -> str:
         return ""
     text = post.get("text")
     return text if isinstance(text, str) else ""
+
+
+_MAX_SCRIPT_CHARS = 5_000_000
+
+
+def _script_body(resp_obj: dict[str, Any]) -> str:
+    """Full text of a script response (empty when absent, binary or huge)."""
+    content = resp_obj.get("content")
+    if not isinstance(content, dict) or content.get("encoding") == "base64":
+        return ""
+    text = content.get("text")
+    if not isinstance(text, str) or not text.strip() or len(text) > _MAX_SCRIPT_CHARS:
+        return ""
+    return text
 
 
 def _response_text(resp_obj: dict[str, Any]) -> str:

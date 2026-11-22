@@ -82,6 +82,10 @@ Live projections derived from stored captures:
 - Evidence on large shared platforms (Google, Facebook, app stores, …) is kept
   for explanation with `ignore_reason: "platform_domain"` and never creates an
   edge.
+- Account evidence types: `email`, `iban`, `phone`, `whatsapp`, `telegram`,
+  `meta_ad_id`, `advertiser_page_id` (all tier A, masked). Placeholder mailboxes
+  carry `ignore_reason: "placeholder_email"`. No `display` contains a raw
+  account, e-mail or phone number, including `shared_sentence` text.
 
 Without a live database, classify returns a
 deterministic demo response and does not store the submitted material.
