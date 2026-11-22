@@ -19,8 +19,9 @@ WORKDIR /app
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol \
+        ffmpeg tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol \
     && tesseract --list-langs 2>&1 | grep -qx pol \
+    && ffmpeg -hide_banner -version >/dev/null \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
     && (getent group 999 >/dev/null || groupadd --system --gid 999 scamgraph) \
